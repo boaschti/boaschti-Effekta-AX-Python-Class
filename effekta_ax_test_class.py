@@ -1,7 +1,7 @@
 import serial
 import crc16
  
-# For Debuging:
+
 #serWR1 = serial.Serial('/dev/ttyUSB0', 2400, timeout=2)  # open serial port effekta 1
 #serextra = serial.Serial('/dev/ttyUSB2', 2400, timeout=2)  # open serial port
 
@@ -24,7 +24,7 @@ class EffektaConn:
         self.name = name
         self.beVerbose = beVerbose
         self.serialName = serialName
-        self.serialConn = serial.Serial(serialName, 2400, timeout=2)
+        self.serialConn = serial.Serial(serialName, 2400, timeout=4)
         
     def __delete__(self):
         self.serialConn.close()
@@ -50,8 +50,22 @@ class EffektaConn:
         cmd = cmd + b'\r'
         return cmd
     
+    
+    def reInitSerial(self):
+        try:
+            if self.beVerbose:
+                print("Serial Port %s reInit!" %self.EffektaName()) 
+            self.serialConn.close()
+            self.serialConn.open()
+        except Exception as e:
+            if self.beVerbose:
+                print("Serial Port reInit failed!")    
+                print(e)   
+    
 
     def getEffektaData(self, cmd):
+        # qery effekta data with given command. Returns the received strind if data are ok. Returns a empty string if data are not ok.
+        
         cmd = self.getCommand(cmd)
         if self.beVerbose:
             print(cmd)
@@ -60,9 +74,8 @@ class EffektaConn:
 
             x = self.serialConn.readline()
         except:
-            self.serialConn.close()
-            self.serialConn = serial.Serial(self.serialName, 2400, timeout=2)
-            return None
+            self.reInitSerial()
+            return ""
         
         y = bytearray(x)
         lenght = len(y)
@@ -84,8 +97,13 @@ class EffektaConn:
         else:
             if self.beVerbose:
                 print("crc error")
-                print("incoming data:")
-                print(x)
+                print("incoming data: %s" %x)
+                print("Command: %s" %cmd)
+                print("Name: %s" %self.EffektaName())
+                print 
+            #Es gab den Fall, dass die Serial so kaputt war dass sie keine Daten mehr lieferte -> crc error. Es half ein close open
+            if len(x) == 0:
+                self.reInitSerial()
             return ""
 
     def setEffektaData(self, cmd, value = ""):
