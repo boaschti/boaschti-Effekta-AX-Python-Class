@@ -12,16 +12,27 @@ import datetime
  
 beVerbose = False
 beVerboseEffekta = False
+#beVerbose = True
+#beVerboseEffekta = True
 
+# Skript Start. Wenn autoInit dann wird StarteMitAkku ignoriert
 StarteMitAkku = True
+AutoInitWrMode = True
+
+
 EffektaCmd = {}
-#EffektaSerialNames = {"Effekta_L1" : '/dev/ttyUSB0'}
-EffektaSerialNames = {"WR1" : '/dev/ttyUSB0'}
-BmsSerial = '/dev/ttyUSB1'
-BattCurrent = 0.0
+#EffektaSerialNames = {"WR1" : '/dev/ttyUSB1'}
+#EffektaSerialNames = {"WR1" : '/dev/ttyUSB1', "WR2" : '/dev/ttyUSB3'}
+
+# usb-FTDI_FT232R_USB_UART_A9A5YBUE-if00-port0  usb-FTDI_USB_Serial_Converter_FT8X1284-if00-port0  usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0
+EffektaSerialNames = {"WR1" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9A5YBUE-if00-port0', "WR2" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9HSILDS-if00-port0'}
+#EffektaSerialNames = {}
+#BmsSerial = '/dev/ttyUSB0'
+BmsSerial = '/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0'
+BattCurrent = 0.0 
 
 VerbraucherPVundNetz = "POP01"  # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
-VerbraucherNetz = "POP00"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netzer
+VerbraucherNetz = "POP00"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
 VerbraucherAkku = "POP02"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
 BattLeer = "PSDV43.0"
 BattWiederEntladen = "PBDV48.0"
@@ -30,8 +41,7 @@ BattWiederEntladen = "PBDV48.0"
 client = mqtt.Client() 
 
 def mqttconnect():
-    client.username_pw_set()
-    client.connect()
+    client.connect("192.168.178.38", 1883, 60) 
     client.loop_start()
     client.subscribe("PV/BMS/command")
 
@@ -41,18 +51,36 @@ def on_connect(client, userdata, flags, rc):
     for name in list(EffektaCmd.keys()):
         client.subscribe("PV/" + name + "/command")
     
+    client.subscribe("PV/allWr/command")
+
     if beVerbose == True:
         print("MQTT Connected with result code " + str(rc))
 
 def on_message(client, userdata, msg):
     global EffektaCmd
+    global BmsWerte
     
     tempTopic = str(msg.topic)
     tempTopicList = tempTopic.split("/")
     
+    # single Effekta commands
     if tempTopicList[1] in list(EffektaSerialNames.keys()) and tempTopicList[2] == "command":
         EffektaCmd[tempTopicList[1]].append(str(msg.payload.decode()))
 
+    # all Effekta/Skript commands
+    if tempTopicList[1] == "allWr" and tempTopicList[2] == "command":
+        if str(msg.payload.decode()) == "WrAufAkku":
+            schalteAlleWrAufAkku()
+        if str(msg.payload.decode()) == "WrAufNetz":
+            schalteAlleWrAufNetzOhneNetzLaden()
+        if str(msg.payload.decode()) == "WrVerbraucherPVundNetz":
+            schalteAlleWrVerbraucherPVundNetz();
+        if str(msg.payload.decode()) == "AkkuschutzEin":
+            BmsWerte["Akkuschutz"] = True
+        if str(msg.payload.decode()) == "AkkuschutzAus":
+            BmsWerte["Akkuschutz"] = False
+    
+    # get CompleteProduction from MQTT
     if tempTopicList[1] in list(EffektaSerialNames.keys()) and tempTopicList[2] == "CompleteProduction":
         EffektaCmd[tempTopicList[1]].append("CompleteProduction")    
         EffektaCmd[tempTopicList[1]].append(str(msg.payload.decode()))
@@ -119,6 +147,13 @@ def schalteAlleWrNetzLadenAus():
         EffektaCmd[i].append("PCP03")       # charge prio 02=Netz und pv, 03=pv    
     BmsWerte["WrNetzladen"] = False
 
+def schalteAlleWrNetzLadenEin():
+    # Funktion ok, wr schaltet netzladen ein
+    global EffektaCmd
+    for i in list(EffektaSerialNames.keys()):
+        EffektaCmd[i].append("PCP02")       # charge prio 02=Netz und pv, 03=pv    
+    BmsWerte["WrNetzladen"] = True
+
 def schalteAlleWrVerbraucherPVundNetz():
     # Funktion noch nicht getestet
     global EffektaCmd
@@ -159,8 +194,9 @@ def schalteAlleWrAufNetz():
     BmsWerte["WrNetzladen"] = True
 
 BmsWerte = {"AkkuStrom": 0.0, "Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "AkkuProz": 0, "Ladephase": "none", "BmsEntladeFreigabe":True, "WrEntladeFreigabe":True, "WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":""}
-SkriptWerte = {}
+
 EntladeFreigabeGesendet = False
+NetzLadenAusGesperrt = False
 
 def GetAndSendBmsData():
     global BattCurrent
@@ -238,38 +274,66 @@ def GetAndSendBmsData():
             BmsWerte["BmsEntladeFreigabe"] = False
             sendeMqtt = True
 
-
+    global AutoInitWrMode
     global EntladeFreigabeGesendet
+    global NetzLadenAusGesperrt
     
+    SkriptWerte = {}
     SkriptWerte["schaltschwelleNetzLadenaus"] = 10.0
     
     if BmsWerte["Akkuschutz"]:
-        SkriptWerte["schaltschwelleAkku"] = 50.0
+        SkriptWerte["schaltschwelleAkku"] = 60.0
         SkriptWerte["schaltschwellePvNetz"] = 40.0
-        SkriptWerte["schaltschwelleNetz"] = 25.0
+        SkriptWerte["schaltschwelleNetz"] = 30.0
     else:
-        SkriptWerte["schaltschwelleAkku"] = 40.0
+        SkriptWerte["schaltschwelleAkku"] = 45.0
         SkriptWerte["schaltschwellePvNetz"] = 30.0
         SkriptWerte["schaltschwelleNetz"] = 15.0
         
+    # Wenn init gesetzt ist und das BMS einen Akkuwert gesendet hat dann stellen wir einen Initial Zustand der Wr her
+    if AutoInitWrMode == True and BmsWerte["AkkuProz"] > 0:
+        AutoInitWrMode = False
+        if 0 < BmsWerte["AkkuProz"] < SkriptWerte["schaltschwelleNetzLadenaus"]:
+            if beVerbose == True:
+                print("Autoinit: Schalte auf Netz mit Laden")
+            schalteAlleWrAufNetzOhneNetzLaden()
+            schalteAlleWrNetzLadenEin()    
+        elif SkriptWerte["schaltschwelleNetzLadenaus"] <= BmsWerte["AkkuProz"] < SkriptWerte["schaltschwellePvNetz"]:
+            schalteAlleWrAufNetzOhneNetzLaden()
+            if beVerbose == True:
+                print("Autoinit: Schalte auf Netz ohne Laden")            
+        elif SkriptWerte["schaltschwellePvNetz"] <= BmsWerte["AkkuProz"] < SkriptWerte["schaltschwelleAkku"]:
+            schalteAlleWrVerbraucherPVundNetz()  
+            if beVerbose == True:
+                print("Autoinit: Schalte auf PV und Netz")            
+        elif BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleAkku"]:
+            schalteAlleWrAufAkku()
+            if beVerbose == True:
+                print("Autoinit: Schalte auf Akku")            
+        
+    # Wir setzen den Error bei 100 prozent zurück. In der Hoffunng dass nicht immer 100 prozent vom BMS kommen dieses fängt aber bei einem Neustart bei 0 proz an.
+    if BmsWerte["AkkuProz"] >= 100.0:
+        BmsWerte["Error"] = False
+        
     if BmsWerte["BmsEntladeFreigabe"] == True and BmsWerte["Error"] == False:
         EntladeFreigabeGesendet = False
-        # Wenn der Akku 40% hat wird er wieder Tag und Nacht genutzt
+        # Wenn der Akku wieder über die schaltschwelleAkku ist dann wird er wieder Tag und Nacht genutzt
         if not BmsWerte["WrMode"] == VerbraucherAkku and BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleAkku"]:
             schalteAlleWrAufAkku()
             BmsWerte["Akkuschutz"] = False
             sendeMqtt = True
             if beVerbose == True:
                 print("Schalte alle WR auf Akku")
-        # Wenn der Akku 30% hat geben wir den Akku wieder frei wenn PV verfügbar ist. PV (Tag), Netz (Nacht)
+        # Wenn der Akku über die schaltschwellePvNetz ist dann geben wir den Akku wieder frei wenn PV verfügbar ist. PV (Tag), Netz (Nacht)
         elif BmsWerte["WrMode"] == VerbraucherNetz and BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwellePvNetz"]:
             # Hier wird explizit nur geschalten wenn der WR auf VerbraucherNetz steht damit der Zweig nur reagiert wenn der Akku leer war und voll wird 
             schalteAlleWrNetzLadenAus()
             schalteAlleWrVerbraucherPVundNetz()
+            NetzLadenAusGesperrt = False
             sendeMqtt = True
             if beVerbose == True:
                 print("Schalte alle WR Verbraucher PV und Netz")
-        # Wenn die Verbraucher auf PV (Tag) und Netz (Nacht) geschaltet wurden und der Akku wieder unter 25% fällt dann wird auf Netz geschaltet
+        # Wenn die Verbraucher auf PV (Tag) und Netz (Nacht) geschaltet wurden und der Akku wieder unter die schaltschwelleNetz fällt dann wird auf Netz geschaltet
         elif BmsWerte["WrMode"] == VerbraucherPVundNetz and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetz"]:
             schalteAlleWrAufNetzOhneNetzLaden()
             BmsWerte["Akkuschutz"] = True
@@ -277,15 +341,22 @@ def GetAndSendBmsData():
             if beVerbose == True:
                 print("Schalte alle WR Netz ohne laden")
         # Wenn das Netz Laden durch eine Unterspannungserkennung eingeschaltet wurde schalten wir es aus wenn der Akku wieder 10% hat
-        elif BmsWerte["WrNetzladen"] == True and BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
+        elif BmsWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and BmsWerte["AkkuProz"] > SkriptWerte["schaltschwelleNetzLadenaus"]:
             schalteAlleWrNetzLadenAus()
-            BmsWerte["WrNetzladen"] = False
             sendeMqtt = True
             if beVerbose == True:
                 print("Schalte alle WR Netz laden aus")
+        elif BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == True and BmsWerte["AkkuProz"] < (SkriptWerte["schaltschwelleNetzLadenaus"] - 2):
+            schalteAlleWrNetzLadenEin()
+            sendeMqtt = True
+            if beVerbose == True:
+                print("Schalte alle WR Netz laden ein")
     elif EntladeFreigabeGesendet == False:
         EntladeFreigabeGesendet = True
         schalteAlleWrAufNetz()
+        # Falls der Akkustand zu hoch ist würde nach einer Abschaltung das Netzladen gleich wieder abgeschaltet werden das wollen wir verhindern
+        if BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
+            NetzLadenAusGesperrt = True
         # wir setzen einen error weil das nicht plausibel ist und wir hin und her schalten sollte die freigabe wieder kommen
         if BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwellePvNetz"]:
             Bmswerte["Error"] = True
@@ -360,22 +431,23 @@ def GetAndSendEffektaData(name, serial, beVerbose):
             tempDailyProduction = tempDailyProduction + (int(PvPower) * effekta_Query_Cycle / 60 / 60 / 1000)
             EffektaWerte["DailyProduction"] = round(tempDailyProduction, 2)
             
-        
-        if timestampbattEnergyCycle + battEnergyCycle < time.time():
-            timestampbattEnergyCycle = time.time()
-            if BattCurrent > 0:
-                tempDailyCharge = tempDailyCharge  + ((float(BattVoltage) * BattCurrent) * battEnergyCycle / 60 / 60 / 1000)
-                EffektaWerte["DailyCharge"] = round(tempDailyCharge, 2)         
-            elif BattCurrent < 0:
-                tempDailyDischarge = tempDailyDischarge  + ((float(BattVoltage) * abs(BattCurrent)) * battEnergyCycle / 60 / 60 / 1000)
-                EffektaWerte["DailyDischarge"] = round(tempDailyDischarge, 2)     
+        if len(EffekaQPIGS) > 0:
+            if timestampbattEnergyCycle + battEnergyCycle < time.time():
+                timestampbattEnergyCycle = time.time()
+                if BattCurrent > 0:
+                    tempDailyCharge = tempDailyCharge  + ((float(BattVoltage) * BattCurrent) * battEnergyCycle / 60 / 60 / 1000)
+                    EffektaWerte["DailyCharge"] = round(tempDailyCharge, 2)         
+                elif BattCurrent < 0:
+                    tempDailyDischarge = tempDailyDischarge  + ((float(BattVoltage) * abs(BattCurrent)) * battEnergyCycle / 60 / 60 / 1000)
+                    EffektaWerte["DailyDischarge"] = round(tempDailyDischarge, 2)     
 
         
         now = datetime.datetime.now()
-        if now.hour == 23 and EffektaWerte["DailyProduction"] > 0.0:
-            EffektaWerte["CompleteProduction"] = EffektaWerte["CompleteProduction"] + round(EffektaWerte["DailyProduction"])
-            EffektaWerte["DailyProduction"] = 0.0
-            tempDailyProduction = 0.0
+        if now.hour == 23:
+            if EffektaWerte["DailyProduction"] > 0.0:
+                EffektaWerte["CompleteProduction"] = EffektaWerte["CompleteProduction"] + round(EffektaWerte["DailyProduction"])
+                EffektaWerte["DailyProduction"] = 0.0
+                tempDailyProduction = 0.0
             EffektaWerte["DailyDischarge"] = 0.0
             tempDailyDischarge = 0.0
             EffektaWerte["DailyCharge"] = 0.0
@@ -438,21 +510,32 @@ for name in list(EffektaSerialNames.keys()):
     client.subscribe("PV/" + name + "/CompleteProduction")
 
 # Warten bis CompleteProduction per MQTT kommt weil es kann mit schalteAlleWrAufAkku() oder schalteAlleWrAufNetz() konflikte geben
-time.sleep(1000)
+time.sleep(1)
 
 serBMS = serial.Serial(BmsSerial, 9600)  # open serial port
 
 #serBMS.write(b'PwlLHC')
+#serBMS.write(b'vsoc 3300')
+#serBMS.write(b'vsoc 3530')
+
 #serBMS.write(b'vleer2750')
 #serBMS.write(b'cap260') # 267 ware es auch schon
 
 #serBMS.write(b'file')
 
-# Initial Zustand herstellen damit das Umschalten bei leerem und voll werdenden Akku funktioniert
-if StarteMitAkku:
-    schalteAlleWrAufAkku()
-else:
-    schalteAlleWrAufNetz()
+# Initial Zustand manuell herstellen damit das Umschalten bei leerem und voll werdenden Akku funktioniert
+if not AutoInitWrMode:
+    if StarteMitAkku:
+        schalteAlleWrAufAkku()
+        if beVerbose == True:
+            print("ManualInit: schalte auf Akku")    
+    else:
+        schalteAlleWrAufNetzOhneNetzLaden()
+        if beVerbose == True:
+            print("ManualInit: schalte auf Netz ohne Laden")    
+        
+if beVerbose == True:
+    print("starte main loop")
 
 while 1:
     try:
@@ -460,8 +543,13 @@ while 1:
     except:
         if beVerbose == True:
             print("BMS read error. Init Serial again!")
-        serBMS.close()  
-        del serBMS
-        serBMS = serial.Serial(BmsSerial, 9600)
+        try:
+            serBMS.close()  
+            serBMS.open()  
+            #del serBMS
+            #serBMS = serial.Serial(BmsSerial, 9600)
+        except:
+            if beVerbose == True:
+                print("BMS reInit Serial failed!")        
         
  
