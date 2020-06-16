@@ -41,6 +41,7 @@ BattWiederEntladen = "PBDV48.0"
 client = mqtt.Client() 
 
 def mqttconnect():
+    client.username_pw_set("","")
     client.connect("192.168.178.38", 1883, 60) 
     client.loop_start()
     client.subscribe("PV/BMS/command")
@@ -134,6 +135,7 @@ def schalteAlleWrAufAkku():
     for i in list(EffektaSerialNames.keys()):
         EffektaCmd[i].append(BattLeer)    # Batt undervoltage
         EffektaCmd[i].append(BattWiederEntladen)   # redischarge voltage
+        #EffektaCmd[i].append("PDJ")       # PowerSaving disable PDJJJ
         EffektaCmd[i].append(VerbraucherAkku)       # load prio 00=Netz, 02=Batt
         EffektaCmd[i].append("PCP03")       # charge prio 02=Netz und pv, 03=pv
     BmsWerte["WrMode"] = VerbraucherAkku
@@ -160,6 +162,7 @@ def schalteAlleWrVerbraucherPVundNetz():
     for i in list(EffektaSerialNames.keys()):
         EffektaCmd[i].append(BattLeer)    # Batt undervoltage
         EffektaCmd[i].append(BattWiederEntladen)   # redischarge voltage
+        #EffektaCmd[i].append("PDJ")       # PowerSaving disable PDJJJ
         EffektaCmd[i].append(VerbraucherPVundNetz)       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
     BmsWerte["WrMode"] = VerbraucherPVundNetz
     BmsWerte["WrEntladeFreigabe"] = True
@@ -172,6 +175,7 @@ def schalteAlleWrAufNetzOhneNetzLaden():
         EffektaCmd[i].append(BattLeer)    # Batt undervoltage
         EffektaCmd[i].append(BattWiederEntladen)   # redischarge voltage
         EffektaCmd[i].append("PCP03")       # charge prio 02=Netz und pv, 03=pv
+        #EffektaCmd[i].append("PEJ")       # PowerSaving enable PEJJJ
     BmsWerte["WrMode"] = VerbraucherNetz
     BmsWerte["WrEntladeFreigabe"] = False
     BmsWerte["WrNetzladen"] = False
@@ -189,6 +193,7 @@ def schalteAlleWrAufNetz():
         EffektaCmd[i].append("PSDV48.0")    # Batt undervoltage
         EffektaCmd[i].append("MUCHGC002")   # Netz Ladestrom
         EffektaCmd[i].append("PCP02")       # charge prio 02=Netz und pv, 03=pv
+        #EffektaCmd[i].append("PEJ")       # PowerSaving enable PEJJJ
     BmsWerte["WrMode"] = VerbraucherNetz
     BmsWerte["WrEntladeFreigabe"] = False
     BmsWerte["WrNetzladen"] = True
@@ -463,23 +468,28 @@ def GetAndSendEffektaData(name, serial, beVerbose):
                 del EffektaCmd[WR.EffektaName()][1]
                 del EffektaCmd[WR.EffektaName()][0]
             else:
+                stateMsg = ""
+                cmd = EffektaCmd[WR.EffektaName()][0]
                 if WR.setEffektaData(EffektaCmd[WR.EffektaName()][0]):
                     writeErrors = 0
+                    stateMsg = "Send cmd %s to %s. Ok."
                     del EffektaCmd[WR.EffektaName()][0]
                     # Timestamp faken damit er gleich ausliest wenn keine Kommandos mehr zu senden sind
                     if len(EffektaCmd[WR.EffektaName()]) == 0:
                         EffektaWerte["timeStamp"] = EffektaWerte["timeStamp"] - effekta_Query_Cycle
                 else:
                     writeErrors += 1
+                    stateMsg = "Send cmd %s to %s. Retry."
                     if writeErrors >= 10:
                         writeErrors = 0
+                        stateMsg = "Send cmd %s to %s. Error."
                         del EffektaCmd[WR.EffektaName()][0]
-                        topic = "PV/" + WR.EffektaName() + "/errors"
-                        try: 
-                            client.publish(topic, "Error cannot send command to %s" %WR.EffektaName())
-                        except:
-                            if beVerbose == True:
-                                print("mqtt konnte nicht gesendet werden")
+                try: 
+                    client.publish("PV/" + WR.EffektaName() + "/cmdState", stateMsg %(cmd, WR.EffektaName()))
+                except:
+                    if beVerbose == True:
+                        print("mqtt konnte nicht gesendet werden")
+                        
 
         if sendeMqtt == True: 
             sendeMqtt = False
