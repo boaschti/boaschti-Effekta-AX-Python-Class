@@ -285,6 +285,7 @@ def GetAndSendBmsData():
     
     SkriptWerte = {}
     SkriptWerte["schaltschwelleNetzLadenaus"] = 10.0
+    SkriptWerte["schaltschwelleNetzLadenein"] = 7.0
     
     if BmsWerte["Akkuschutz"]:
         SkriptWerte["schaltschwelleAkku"] = 60.0
@@ -292,7 +293,7 @@ def GetAndSendBmsData():
         SkriptWerte["schaltschwelleNetz"] = 30.0
     else:
         SkriptWerte["schaltschwelleAkku"] = 45.0
-        SkriptWerte["schaltschwellePvNetz"] = 30.0
+        SkriptWerte["schaltschwellePvNetz"] = 20.0
         SkriptWerte["schaltschwelleNetz"] = 15.0
         
     # Wenn init gesetzt ist und das BMS einen Akkuwert gesendet hat dann stellen wir einen Initial Zustand der Wr her
@@ -341,17 +342,21 @@ def GetAndSendBmsData():
         # Wenn die Verbraucher auf PV (Tag) und Netz (Nacht) geschaltet wurden und der Akku wieder unter die schaltschwelleNetz fällt dann wird auf Netz geschaltet
         elif BmsWerte["WrMode"] == VerbraucherPVundNetz and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetz"]:
             schalteAlleWrAufNetzOhneNetzLaden()
-            BmsWerte["Akkuschutz"] = True
             sendeMqtt = True
             if beVerbose == True:
                 print("Schalte alle WR Netz ohne laden")
         # Wenn das Netz Laden durch eine Unterspannungserkennung eingeschaltet wurde schalten wir es aus wenn der Akku wieder 10% hat
-        elif BmsWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and BmsWerte["AkkuProz"] > SkriptWerte["schaltschwelleNetzLadenaus"]:
+        elif BmsWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
             schalteAlleWrNetzLadenAus()
             sendeMqtt = True
             if beVerbose == True:
                 print("Schalte alle WR Netz laden aus")
-        elif BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == True and BmsWerte["AkkuProz"] < (SkriptWerte["schaltschwelleNetzLadenaus"] - 2):
+        elif BmsWerte["WrMode"] != VerbraucherAkku and BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == False and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetzLadenaus"] and BmsWerte["AkkuProz"] > 0.0:
+            BmsWerte["Akkuschutz"] = True
+            sendeMqtt = True
+            if beVerbose == True:
+                print("Schalte Akkuschutz ein")
+        elif BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == True and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetzLadenein"]:
             schalteAlleWrNetzLadenEin()
             sendeMqtt = True
             if beVerbose == True:

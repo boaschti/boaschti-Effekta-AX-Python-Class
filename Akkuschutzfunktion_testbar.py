@@ -51,11 +51,13 @@ def schalteAlleWrAufNetz():
 
 
 def testfunk():
+
     global EntladeFreigabeGesendet
     global NetzLadenAusGesperrt
     
     SkriptWerte = {}
     SkriptWerte["schaltschwelleNetzLadenaus"] = 10.0
+    SkriptWerte["schaltschwelleNetzLadenein"] = 7.0
     
     if BmsWerte["Akkuschutz"]:
         SkriptWerte["schaltschwelleAkku"] = 50.0
@@ -65,6 +67,8 @@ def testfunk():
         SkriptWerte["schaltschwelleAkku"] = 40.0
         SkriptWerte["schaltschwellePvNetz"] = 30.0
         SkriptWerte["schaltschwelleNetz"] = 15.0
+                 
+            
         
     # Wir setzen den Error bei 100 prozent zurück. In der Hoffunng dass nicht immer 100 prozent vom BMS kommen dieses fängt aber bei einem Neustart bei 0 proz an.
     if BmsWerte["AkkuProz"] >= 100.0:
@@ -91,17 +95,21 @@ def testfunk():
         # Wenn die Verbraucher auf PV (Tag) und Netz (Nacht) geschaltet wurden und der Akku wieder unter die schaltschwelleNetz fällt dann wird auf Netz geschaltet
         elif BmsWerte["WrMode"] == VerbraucherPVundNetz and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetz"]:
             schalteAlleWrAufNetzOhneNetzLaden()
-            BmsWerte["Akkuschutz"] = True
             sendeMqtt = True
             if beVerbose == True:
                 print("Schalte alle WR Netz ohne laden")
         # Wenn das Netz Laden durch eine Unterspannungserkennung eingeschaltet wurde schalten wir es aus wenn der Akku wieder 10% hat
-        elif BmsWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and BmsWerte["AkkuProz"] > SkriptWerte["schaltschwelleNetzLadenaus"]:
+        elif BmsWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
             schalteAlleWrNetzLadenAus()
             sendeMqtt = True
             if beVerbose == True:
                 print("Schalte alle WR Netz laden aus")
-        elif BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == True and BmsWerte["AkkuProz"] < (SkriptWerte["schaltschwelleNetzLadenaus"] - 2):
+        elif BmsWerte["WrMode"] != VerbraucherAkku and BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == False and BmsWerte["AkkuProz"] < SkriptWerte["schaltschwelleNetzLadenaus"] and BmsWerte["AkkuProz"] > 0.0:
+            BmsWerte["Akkuschutz"] = True
+            sendeMqtt = True
+            if beVerbose == True:
+                print("Schalte Akkuschutz ein")
+        elif BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == True and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetzLadenein"]:
             schalteAlleWrNetzLadenEin()
             sendeMqtt = True
             if beVerbose == True:
@@ -119,10 +127,35 @@ def testfunk():
         if beVerbose == True:
             print("Schalte alle WR auf Netz mit laden")
 
+
             
             
             
             
+def istAufAkku(dict):
+    if dict["WrMode"] == VerbraucherAkku and BmsWerte["WrNetzladen"] == False:
+        print("OK")
+    else: 
+        print("Error")
+
+def istAufPvNetz(dict):
+    if dict["WrMode"] == VerbraucherPVundNetz and BmsWerte["WrNetzladen"] == False:
+        print("OK")
+    else: 
+        print("Error")
+
+def istAufNetz(dict):
+    if dict["WrMode"] == VerbraucherNetz and BmsWerte["WrNetzladen"] == False:
+        print("OK")
+    else: 
+        print("Error")        
+
+def istAufNetzMitLaden(dict):
+    if dict["WrMode"] == VerbraucherNetz and BmsWerte["WrNetzladen"] == True:
+        print("OK")
+    else: 
+        print("Error")    
+
 def test():
 
 # die folgenden Wertegrenzen wurden verwendet
@@ -137,87 +170,115 @@ def test():
 #        
         
     global BmsWerte
+    # Wir starten im normalen Betrieb mit Akku
+    BmsWerte["WrMode"] = VerbraucherAkku
     print("xxxxxxxxxxxxxxxxxxxxxxx 5-100-5 Zyklus xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
     BmsWerte["AkkuProz"] = 5
     testfunk()   
-    testfunk() 
+    testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 11
     testfunk()
     testfunk() 
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
-    print("vvvvv jetzt muss es auf Akku schalten")  
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 41
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 11
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 5
     testfunk()   
     testfunk()
-    print("kein Print ist OK")
+    istAufAkku(BmsWerte)
     
     print("vvvvv jetzt muss es auf Netz mit Laden schalten") 
     BmsWerte["BmsEntladeFreigabe"] = False
     testfunk()   
     testfunk()
+    istAufNetzMitLaden(BmsWerte)
     BmsWerte["BmsEntladeFreigabe"] = True
     testfunk()   
     testfunk()
+    istAufNetzMitLaden(BmsWerte)
 
     print("xxxxxxxxxxxxxxxxxxxxxxx 5-100-5 Zyklus nach unterspannung xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
 
     BmsWerte["AkkuProz"] = 5
     testfunk()   
     testfunk() 
-    print("vvvvv jetzt muss es Laden ausschalten")    
+    print("vvvvv jetzt muss es Laden ausschalten")  
     BmsWerte["AkkuProz"] = 11
     testfunk()
     testfunk() 
+    istAufNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     print("vvvvv jetzt muss es auf PV und Netz schalten")
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufPvNetz(BmsWerte)
     print("vvvvv jetzt muss es auf Akku schalten")    
     BmsWerte["AkkuProz"] = 41
     testfunk()   
     testfunk() 
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 11
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 5    
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     
     print("vvvvv jetzt muss es auf Netz mit Laden schalten") 
     BmsWerte["BmsEntladeFreigabe"] = False
     testfunk()   
     testfunk()
+    istAufNetzMitLaden(BmsWerte)
     BmsWerte["BmsEntladeFreigabe"] = True
     testfunk()   
-    testfunk()    
+    testfunk()   
+    istAufNetzMitLaden(BmsWerte)    
     
     print("xxxxxxxxxxxxxxxxxxxxxxx 5-31-5 Zyklus mit Entladung -> Akkuschutz ausloesen xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+
+    if BmsWerte["Akkuschutz"]:
+        print("vvv Akkuschutz gesetzt")
+        print("Error")
+    else:
+        print("vvv Akkuschutz nicht gesetzt") 
+        print("OK")
 
     BmsWerte["AkkuProz"] = 5
     testfunk()   
@@ -226,23 +287,29 @@ def test():
     BmsWerte["AkkuProz"] = 11
     testfunk()
     testfunk() 
+    istAufNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     print("vvvvv jetzt muss es auf PV und Netz schalten")
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufPvNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk() 
+    istAufPvNetz(BmsWerte)
     print("vvvvv jetzt muss es auf Netz ohne Laden schalten")   
     BmsWerte["AkkuProz"] = 11
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 9
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     
     print("xxxxxxxxxxxxxxxxxxxxxxx 11-41-6-51-9 Zyklus. Test auf hoeheren Akkubereich Akkuschutz aktiv xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
     
@@ -261,16 +328,20 @@ def test():
     BmsWerte["AkkuProz"] = 11
     testfunk()
     testfunk() 
+    istAufNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     print("vvvvv jetzt muss es auf PV und Netz schalten")    
     BmsWerte["AkkuProz"] = 41
     testfunk()   
     testfunk() 
+    istAufPvNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
@@ -278,39 +349,65 @@ def test():
     BmsWerte["AkkuProz"] = 11
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 9
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     print("vvvvv jetzt muss es NetzLaden ein schalten")   
     BmsWerte["AkkuProz"] = 6
     testfunk()   
     testfunk()    
+    istAufNetzMitLaden(BmsWerte)
     print("vvvvv jetzt muss es NetzLaden aus schalten")   
+    BmsWerte["AkkuProz"] = 11
+    testfunk()
+    testfunk()    
+    istAufNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufNetz(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()    
+    istAufNetz(BmsWerte)
+    print("vvvvv jetzt muss es auf PV und Netz schalten")
+    BmsWerte["AkkuProz"] = 41
+    testfunk()   
+    testfunk()    
+    istAufPvNetz(BmsWerte)
     print("vvvvv jetzt muss es auf Akku schalten")    
     BmsWerte["AkkuProz"] = 51
     testfunk()   
     testfunk()    
+    istAufAkku(BmsWerte)
+    if BmsWerte["Akkuschutz"]:
+        print("vvv Akkuschutz gesetzt")
+        print("error")
+    else:
+        print("vvv Akkuschutz nicht gesetzt") 
+        print("Ok")
     BmsWerte["AkkuProz"] = 41
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()   
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 11
     testfunk()
     testfunk() 
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 9
     testfunk()   
-    testfunk()    
+    testfunk()  
+    istAufAkku(BmsWerte)    
     
     print("xxxxxxxxxxxxxxxxxxxxxxx 11-41-5 Normaler Zyklus akkuschutz inaktiv xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
 
@@ -324,34 +421,43 @@ def test():
     BmsWerte["AkkuProz"] = 11
     testfunk()
     testfunk() 
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 41
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 51
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 41
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
-    testfunk()   
+    testfunk() 
+    istAufAkku(BmsWerte)    
     BmsWerte["AkkuProz"] = 11
     testfunk()
     testfunk() 
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 5
     testfunk()   
     testfunk()    
-    print("kein Print ist OK")    
+    istAufAkku(BmsWerte)
 
 
     print("xxxxxxxxxxxxxxxxxxxxxxx 17-41-5 Zyklus unterspannung und falschen soc xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
@@ -360,6 +466,7 @@ def test():
     BmsWerte["AkkuProz"] = 17
     testfunk()   
     testfunk() 
+    istAufAkku(BmsWerte)
 
     print("vvvvv jetzt muss es auf Netz mit Laden schalten") 
     BmsWerte["BmsEntladeFreigabe"] = False
@@ -384,6 +491,8 @@ def test():
     else:
         print("vvv WrNetzladen nicht gesetzt")
         print("error")
+        
+    istAufNetzMitLaden(BmsWerte)
 
     BmsWerte["AkkuProz"] = 27
     testfunk()    
@@ -392,22 +501,28 @@ def test():
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufPvNetz(BmsWerte)
     print("vvvvv jetzt muss es auf Akku schalten")    
     BmsWerte["AkkuProz"] = 41
     testfunk()   
     testfunk() 
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 31
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 27
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 11
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     BmsWerte["AkkuProz"] = 5    
     testfunk()   
     testfunk()
+    istAufAkku(BmsWerte)
     
 test()
 
