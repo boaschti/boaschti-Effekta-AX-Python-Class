@@ -80,6 +80,10 @@ def on_message(client, userdata, msg):
             BmsWerte["Akkuschutz"] = True
         if str(msg.payload.decode()) == "AkkuschutzAus":
             BmsWerte["Akkuschutz"] = False
+        if str(msg.payload.decode()) == "NetzLadenAus":
+            schalteAlleWrNetzLadenAus()
+        if str(msg.payload.decode()) == "NetzLadenEin":
+            schalteAlleWrNetzLadenEin()
     
     # get CompleteProduction from MQTT
     if tempTopicList[1] in list(EffektaSerialNames.keys()) and tempTopicList[2] == "CompleteProduction":
@@ -89,6 +93,9 @@ def on_message(client, userdata, msg):
     
         
 def checkWerteSprung(newValue, oldValue, percent, min, max):
+    
+    # Diese Funktion prüft, dass der neue Wert innerhalb der angegebenen min max Grenzen und ausserhalb der angegebenen Prozent Grenze
+    # Diese Funktion wird verwendet um kleine Wertsprünge rauszu Filtern und Werte Grenzen einzuhalten
 
     if newValue == oldValue == 0:
         if beVerbose == True:
@@ -110,7 +117,26 @@ def checkWerteSprung(newValue, oldValue, percent, min, max):
             print("wert wird nicht uebernommen")
         return False
        
-        
+def checkWerteSprungMaxJump(newValue, oldValue, jump):
+    # Diese Funktion prüft, dass sich der neue Wert innerhalb des angegebenen Sprung befindet.
+    # Diese Funktion wird verwendet um Ausreißer raus zu Filtern
+    
+    if newValue == oldValue == 0:
+        if beVerbose == True:
+            print("wert wird nicht uebernommen")
+        return False
+    
+    minValue = oldValue - jump
+    maxValue = oldValue + jump
+    
+    if (minValue < newValue < maxValue):
+        if beVerbose == True:
+            print("wert wird uebernommen")
+        return True
+    else:
+        if beVerbose == True:
+            print("wert wird nicht uebernommen")
+        return False  
 
 client.on_connect = on_connect
 client.on_message = on_message
@@ -198,7 +224,9 @@ def schalteAlleWrAufNetz():
     BmsWerte["WrEntladeFreigabe"] = False
     BmsWerte["WrNetzladen"] = True
 
-BmsWerte = {"AkkuStrom": 0.0, "Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "AkkuProz": 0, "Ladephase": "none", "BmsEntladeFreigabe":True, "WrEntladeFreigabe":True, "WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":""}
+
+InitAkkuProz = -1
+BmsWerte = {"AkkuStrom": 0.0, "Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "AkkuProz": InitAkkuProz, "Ladephase": "none", "BmsEntladeFreigabe":True, "WrEntladeFreigabe":True, "WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":""}
 
 EntladeFreigabeGesendet = False
 NetzLadenAusGesperrt = False
@@ -251,9 +279,14 @@ def GetAndSendBmsData():
                     print("convertError")
         if i == b'SOC':
             try:
-                if checkWerteSprung(float(y[3]), BmsWerte["AkkuProz"], 1, -101, 101): 
-                    sendeMqtt = True
-                    BmsWerte["AkkuProz"] = float(y[3])
+                if BmsWerte["AkkuProz"] == InitAkkuProz:
+                    if checkWerteSprung(float(y[3]), BmsWerte["AkkuProz"], 1, -101, 101): 
+                        sendeMqtt = True
+                        BmsWerte["AkkuProz"] = float(y[3])
+                else:
+                    if checkWerteSprung(float(y[3]), BmsWerte["AkkuProz"], 1, -101, 101) and checkWerteSprungMaxJump(float(y[3]), BmsWerte["AkkuProz"], 10): 
+                        sendeMqtt = True
+                        BmsWerte["AkkuProz"] = float(y[3])
             except:
                 if beVerbose == True:
                     print("convertError")
@@ -297,7 +330,7 @@ def GetAndSendBmsData():
         SkriptWerte["schaltschwelleNetz"] = 15.0
         
     # Wenn init gesetzt ist und das BMS einen Akkuwert gesendet hat dann stellen wir einen Initial Zustand der Wr her
-    if AutoInitWrMode == True and BmsWerte["AkkuProz"] > 0:
+    if AutoInitWrMode == True and BmsWerte["AkkuProz"] != InitAkkuProz:
         AutoInitWrMode = False
         if 0 < BmsWerte["AkkuProz"] < SkriptWerte["schaltschwelleNetzLadenaus"]:
             if beVerbose == True:
