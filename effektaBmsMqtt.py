@@ -1,7 +1,7 @@
 import serial
 import paho.mqtt.client as mqtt
 import json 
-from effekta_ax_test_class import EffektaConn
+from effekta_ax_class import EffektaConn
 import _thread
 from threading import Thread
 import time
