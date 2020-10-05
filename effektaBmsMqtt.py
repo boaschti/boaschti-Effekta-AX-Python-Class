@@ -108,7 +108,9 @@ def on_message(client, userdata, msg):
             schalteAlleWrNetzLadenAus()
         if str(msg.payload.decode()) == "NetzLadenEin":
             schalteAlleWrNetzLadenEin()
-    
+        if str(msg.payload.decode()) == "NetzSchnellLadenEin":
+            schalteAlleWrNetzSchnellLadenEin()
+            
     # get CompleteProduction from MQTT
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "CompleteProduction":
         EffektaData[tempTopicList[1]]["EffektaCmd"].append("CompleteProduction")    
@@ -188,8 +190,24 @@ def schalteAlleWrNetzLadenEin():
     global BmsWerte
     
     for i in list(EffektaData.keys()):
-        EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv    
+        EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
+        EffektaData[i]["EffektaCmd"].append("MUCHGC002")   # Netz Ladestrom  
     BmsWerte["WrNetzladen"] = True
+
+def schalteAlleWrNetzSchnellLadenEin():
+    # Funktion ok, wr schaltet netzladen ein
+    global EffektaData
+    global BmsWerte
+    
+    if BmsWerte["WrMode"] == VerbraucherAkku:                   # das funktioniert nur wenn das skript auf VerbraucherAkku staht
+        for i in list(EffektaData.keys()):
+            EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
+            EffektaData[i]["EffektaCmd"].append(VerbraucherNetz)       # load prio 00=Netz, 02=Batt
+            EffektaData[i]["EffektaCmd"].append("MUCHGC030")   # Netz Ladestrom 
+            #BmsWerte["WrNetzladen"] = True
+    else:
+        myPrint("Info: Bitte erst auf Akkubetrieb schalten!")
+    
 
 def schalteAlleWrVerbraucherPVundNetz():
     # Funktion noch nicht getestet
@@ -609,7 +627,7 @@ def handleWeather(wetterdaten):
         initWeather = True
         
     # Wir wollen das Wetter um 15 und um 6 Uhr holen
-    if (now.hour == 15 and wetterdaten["lastrequest"] != 15) or (now.hour == 6 and wetterdaten["lastrequest"] != 6) or initWeather:
+    if (now.hour == 14 and wetterdaten["lastrequest"] != 14) or (now.hour == 5 and wetterdaten["lastrequest"] != 5) or (now.hour == 19 and wetterdaten["lastrequest"] != 19) or initWeather:
         wetterdaten["lastrequest"] = now.hour
         publishWeather = True
         try:
@@ -626,14 +644,15 @@ def handleWeather(wetterdaten):
         if now.day == int(tempDate[0]):
             publishWeather = True
             if "Tag_1" in wetterdaten:
-                wetterDaten["Tag_0"] = wetterDaten["Tag_1"]
+                wetterdaten["Tag_0"] = wetterdaten["Tag_1"]
             if "Tag_2" in wetterdaten:
-                wetterDaten["Tag_1"] = wetterDaten["Tag_2"]
+                wetterdaten["Tag_1"] = wetterdaten["Tag_2"]
             if "Tag_3" in wetterdaten:
-                wetterDaten["Tag_2"] = wetterDaten["Tag_3"]
+                wetterdaten["Tag_2"] = wetterdaten["Tag_3"]
+            if "Tag_4" in wetterdaten:
+                wetterdaten["Tag_3"] = wetterdaten["Tag_4"]
             # Wir füllen von hinten mit None auf
-            wetterDaten["Tag_4"] = None
-            wetterDaten["Tag_3"] = wetterDaten["Tag_4"]
+            wetterdaten["Tag_4"] = None
             
     if publishWeather:
         try: 
@@ -660,6 +679,7 @@ time.sleep(1)
 
 serBMS = serial.Serial(BmsSerial, 9600)  # open serial port
 
+
 #serBMS.write(b'vsoc 3300')
 #serBMS.write(b'vsoc 3530')
 
@@ -672,6 +692,7 @@ serBMS = serial.Serial(BmsSerial, 9600)  # open serial port
 #serBMS.write(b'vsoc 3550')
 #serBMS.write(b'vsoc 3550')
 #serBMS.write(b'sensor 200')
+#serBMS.write(getPassBMS())
 
 
 #serBMS.write(b'vbal 3550')
