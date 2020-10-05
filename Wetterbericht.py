@@ -5,6 +5,7 @@ import datetime
 
 
 beVerbose = False
+#beVerbose = True
 
 def myPrint(data):
     if beVerbose:
@@ -80,6 +81,7 @@ def getSonnenStunden():
     richtigeTabellenTeilGefunden = False
     tabelleDatumGefunden = False
     tabelleSonnenStundenGefunden = False
+    tag = 0
     wetterDaten = {}
     datum = ""
     sonnenStunden = ""
@@ -120,21 +122,30 @@ def getSonnenStunden():
                         wetterDaten["Tag_0"]["Sonnenstunden"] = int(tempSun[0])
                         wetterDaten["Tag_0"]["Datum"] = tempDate[1]
                     elif (extDay == now.day + 1):
+                        tag = 1
                         wetterDaten["Tag_1"] = {}
                         wetterDaten["Tag_1"]["Sonnenstunden"] = int(tempSun[0])
                         wetterDaten["Tag_1"]["Datum"] = tempDate[1]                  
                     elif (extDay == now.day + 2):
+                        tag = 2
                         wetterDaten["Tag_2"] = {}
                         wetterDaten["Tag_2"]["Sonnenstunden"] = int(tempSun[0])
                         wetterDaten["Tag_2"]["Datum"] = tempDate[1]     
                     elif (extDay == now.day + 3):
+                        tag = 3
                         wetterDaten["Tag_3"] = {}
                         wetterDaten["Tag_3"]["Sonnenstunden"] = int(tempSun[0])
                         wetterDaten["Tag_3"]["Datum"] = tempDate[1]      
                     elif (extDay == now.day + 4):
+                        tag = 4
                         wetterDaten["Tag_4"] = {}
                         wetterDaten["Tag_4"]["Sonnenstunden"] = int(tempSun[0])
                         wetterDaten["Tag_4"]["Datum"] = tempDate[1]      
+                elif extMonth == now.month + 1:
+                        tag = tag + 1
+                        wetterDaten["Tag_%i"%tag] = {}
+                        wetterDaten["Tag_%i"%tag]["Sonnenstunden"] = int(tempSun[0])
+                        wetterDaten["Tag_%i"%tag]["Datum"] = tempDate[1]    
                 myPrint("Datum: %s" %datum)
                 myPrint("Sonne: %s" %sonnenStunden)
                 myPrint("******")
