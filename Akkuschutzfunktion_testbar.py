@@ -31,9 +31,9 @@ def myPrint(msg):
     print(msg)
 
 def schalteAlleWrAufAkku():
-    BmsWerte["WrMode"] = VerbraucherAkku
-    BmsWerte["WrEntladeFreigabe"] = True
-    BmsWerte["WrNetzladen"] = False
+    SkriptWerte["WrMode"] = VerbraucherAkku
+    SkriptWerte["WrEntladeFreigabe"] = True
+    SkriptWerte["WrNetzladen"] = False
 
 def schalteAlleWrNetzLadenAus():
     # Funktion ok, wr schaltet netzladen aus

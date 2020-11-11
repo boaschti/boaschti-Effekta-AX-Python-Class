@@ -46,9 +46,10 @@ BattWiederEntladen = "PBDV48.0"
 
 BattCurrent = 0.0     # BattCurrent updated with higher frequency
 InitAkkuProz = -1
-BmsWerte = {"AkkuStrom": BattCurrent, "Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "AkkuProz": InitAkkuProz, "Ladephase": "none", "BmsEntladeFreigabe":True, "WrEntladeFreigabe":True, "WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":""}
+#BmsWerte = {"AkkuStrom": BattCurrent, "Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "AkkuProz": InitAkkuProz, "Ladephase": "none", "BmsEntladeFreigabe":True}
+BmsWerte = {"Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "Ladephase": "none", "BmsEntladeFreigabe":True}
 
-SkriptWerte = {}
+SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":"", "SkriptMode":"Auto"}
 
 
 client = mqtt.Client() 
@@ -62,6 +63,13 @@ def myPrint(msg):
             myPrint("mqtt konnte nicht gesendet werden")
     if beVerbose:
         print(msg)
+def sendeSkriptDaten():
+    global SkriptWerte
+        
+    try: 
+        client.publish("PV/Skript/istwerte", json.dumps(SkriptWerte), retain=True)
+    except:
+        myPrint("sendeSkriptDaten: mqtt konnte nicht gesendet werden")
 
 def mqttconnect():
 
@@ -83,7 +91,7 @@ def on_connect(client, userdata, flags, rc):
 
 def on_message(client, userdata, msg):
     global EffektaData
-    global BmsWerte
+    global SkriptWerte
     
     tempTopic = str(msg.topic)
     tempTopicList = tempTopic.split("/")
@@ -101,9 +109,9 @@ def on_message(client, userdata, msg):
         if str(msg.payload.decode()) == "WrVerbraucherPVundNetz":
             schalteAlleWrVerbraucherPVundNetz();
         if str(msg.payload.decode()) == "AkkuschutzEin":
-            BmsWerte["Akkuschutz"] = True
+            SkriptWerte["Akkuschutz"] = True
         if str(msg.payload.decode()) == "AkkuschutzAus":
-            BmsWerte["Akkuschutz"] = False
+            SkriptWerte["Akkuschutz"] = False
         if str(msg.payload.decode()) == "NetzLadenAus":
             schalteAlleWrNetzLadenAus()
         if str(msg.payload.decode()) == "NetzLadenEin":
@@ -163,7 +171,7 @@ client.on_message = on_message
 
 def schalteAlleWrAufAkku():
     global EffektaData
-    global BmsWerte
+    global SkriptWerte
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append(BattLeer)    # Batt undervoltage
@@ -171,23 +179,26 @@ def schalteAlleWrAufAkku():
         #EffektaData[i]["EffektaCmd"].append("PDJ")       # PowerSaving disable PDJJJ
         EffektaData[i]["EffektaCmd"].append(VerbraucherAkku)       # load prio 00=Netz, 02=Batt
         EffektaData[i]["EffektaCmd"].append("PCP03")       # charge prio 02=Netz und pv, 03=pv
-    BmsWerte["WrMode"] = VerbraucherAkku
-    BmsWerte["WrEntladeFreigabe"] = True
-    BmsWerte["WrNetzladen"] = False
+        
+    SkriptWerte["WrMode"] = VerbraucherAkku
+    SkriptWerte["WrNetzladen"] = False
+    sendeSkriptDaten()
         
 def schalteAlleWrNetzLadenAus():
     # Funktion ok, wr schaltet netzladen aus
     global EffektaData
-    global BmsWerte
+    global SkriptWerte
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append("PCP03")       # charge prio 02=Netz und pv, 03=pv    
-    BmsWerte["WrNetzladen"] = False
+        
+    SkriptWerte["WrNetzladen"] = False
+    sendeSkriptDaten()
 
 def schalteAlleWrNetzLadenEin():
     # Funktion ok, wr schaltet netzladen ein
     global EffektaData
-    global BmsWerte
+    global SkriptWerte
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
@@ -197,45 +208,50 @@ def schalteAlleWrNetzLadenEin():
 def schalteAlleWrNetzSchnellLadenEin():
     # Funktion ok, wr schaltet netzladen ein
     global EffektaData
-    global BmsWerte
+    global SkriptWerte
     
-    if BmsWerte["WrMode"] == VerbraucherAkku:                   # das funktioniert nur wenn das skript auf VerbraucherAkku staht
-        for i in list(EffektaData.keys()):
-            EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
-            EffektaData[i]["EffektaCmd"].append(VerbraucherNetz)       # load prio 00=Netz, 02=Batt
-            EffektaData[i]["EffektaCmd"].append("MUCHGC030")   # Netz Ladestrom 
-            #BmsWerte["WrNetzladen"] = True
-    else:
-        myPrint("Info: Bitte erst auf Akkubetrieb schalten!")
+
+    for i in list(EffektaData.keys()):
+        EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
+        EffektaData[i]["EffektaCmd"].append(VerbraucherNetz)       # load prio 00=Netz, 02=Batt
+        EffektaData[i]["EffektaCmd"].append("MUCHGC030")   # Netz Ladestrom 
+        
+    SkriptWerte["WrNetzladen"] = True
+    SkriptWerte["SkriptMode"] = "Manual"
+    SkriptWerte["WrMode"] = VerbraucherNetz
+    sendeSkriptDaten()
+    myPrint("Info: Die Anlage wurde auf manuell gestellt!")
     
 
 def schalteAlleWrVerbraucherPVundNetz():
     # Funktion noch nicht getestet
     global EffektaData
-    global BmsWerte
+    global SkriptWerte
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append(BattLeer)    # Batt undervoltage
         EffektaData[i]["EffektaCmd"].append(BattWiederEntladen)   # redischarge voltage
-        #EffektaData[i]["EffektaCmd"].append("PDJ")       # PowerSaving disable PDJJJ
+        #EffektaData[i]["EffektaCmd"].append("PDj")       # PowerSaving disable PDJJJ
         EffektaData[i]["EffektaCmd"].append(VerbraucherPVundNetz)       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
-    BmsWerte["WrMode"] = VerbraucherPVundNetz
-    BmsWerte["WrEntladeFreigabe"] = True
+        
+    SkriptWerte["WrMode"] = VerbraucherPVundNetz
+    sendeSkriptDaten()
 
 def schalteAlleWrAufNetzOhneNetzLaden():
     # Diese Funktion ist dazu da, um den Akku zu schonen wenn lange schlechtes wetter ist und zu wenig PV leistung kommt sodass die Verbraucher versorgt werden können
     global EffektaData
-    global BmsWerte
+    global SkriptWerte
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append(VerbraucherNetz)       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
         EffektaData[i]["EffektaCmd"].append(BattLeer)    # Batt undervoltage
         EffektaData[i]["EffektaCmd"].append(BattWiederEntladen)   # redischarge voltage
         EffektaData[i]["EffektaCmd"].append("PCP03")       # charge prio 02=Netz und pv, 03=pv
-        #EffektaData[i]["EffektaCmd"].append("PEJ")       # PowerSaving enable PEJJJ
-    BmsWerte["WrMode"] = VerbraucherNetz
-    BmsWerte["WrEntladeFreigabe"] = False
-    BmsWerte["WrNetzladen"] = False
+        #EffektaData[i]["EffektaCmd"].append("PEj")       # PowerSaving enable PEJJJ
+        
+    SkriptWerte["WrMode"] = VerbraucherNetz
+    SkriptWerte["WrNetzladen"] = False
+    sendeSkriptDaten()
 
 def schalteAlleWrAufNetzMitNetzladen():
     # Test:
@@ -244,7 +260,7 @@ def schalteAlleWrAufNetzMitNetzladen():
     # wr schaltet sofort auf netz wenn zusätzlich dann der netz ausfällt schaltet er wieder auf batt bis diese <48V hat
     # bei wieder einschaltetn läd er mit netz wenn kein pv da ist. wenn pv dann kommt läd er damit zusätzlich
     global EffektaData
-    global BmsWerte
+    global SkriptWerte
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append(VerbraucherNetz)       # load prio 00=Netz, 02=Batt
@@ -252,14 +268,17 @@ def schalteAlleWrAufNetzMitNetzladen():
         EffektaData[i]["EffektaCmd"].append("PSDV48.0")    # Batt undervoltage
         EffektaData[i]["EffektaCmd"].append("MUCHGC002")   # Netz Ladestrom
         EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv
-        #EffektaData[i]["EffektaCmd"].append("PEJ")       # PowerSaving enable PEJJJ
-    BmsWerte["WrMode"] = VerbraucherNetz
-    BmsWerte["WrEntladeFreigabe"] = False
-    BmsWerte["WrNetzladen"] = True
+        #EffektaData[i]["EffektaCmd"].append("PEj")       # PowerSaving enable PEJJJ
+        
+    SkriptWerte["WrMode"] = VerbraucherNetz
+    SkriptWerte["WrNetzladen"] = True
+    sendeSkriptDaten()
+
 
 def GetAndSendBmsData():
     global BattCurrent
-
+    global BmsWerte
+    
     sendeMqtt = False
     lastLine = False
     # Wir lesen alle Zeilen der Serial parsen nach Schlüsselwörten und holen uns die Werte raus.
@@ -338,7 +357,7 @@ def GetAndSendBmsData():
             client.publish("PV/BMS/istwerte", json.dumps(BmsWerte))
             myPrint(BmsWerte)
         except:
-            myPrint("mqtt konnte nicht gesendet werden")
+            myPrint("GetAndSendBmsData: mqtt konnte nicht gesendet werden")
         
     myPrint(x)
 
@@ -348,23 +367,49 @@ def autoInitInverter():
     global SkriptWerte
     global BmsWerte
 
-    if 0 < BmsWerte["AkkuProz"] < SkriptWerte["schaltschwelleNetzLadenaus"]:
+    if 0 < SocMonitorWerte["Prozent"] < SkriptWerte["schaltschwelleNetzLadenaus"]:
         myPrint("Autoinit: Schalte auf Netz mit Laden")
         schalteAlleWrAufNetzOhneNetzLaden()
         schalteAlleWrNetzLadenEin()    
-    elif SkriptWerte["schaltschwelleNetzLadenaus"] <= BmsWerte["AkkuProz"] < SkriptWerte["schaltschwellePvNetz"]:
+    elif SkriptWerte["schaltschwelleNetzLadenaus"] <= SocMonitorWerte["Prozent"] < SkriptWerte["schaltschwellePvNetz"]:
         schalteAlleWrAufNetzOhneNetzLaden()
         myPrint("Autoinit: Schalte auf Netz ohne Laden")            
-    elif SkriptWerte["schaltschwellePvNetz"] <= BmsWerte["AkkuProz"] < SkriptWerte["schaltschwelleAkku"]:
+    elif SkriptWerte["schaltschwellePvNetz"] <= SocMonitorWerte["Prozent"] < SkriptWerte["schaltschwelleAkku"]:
         schalteAlleWrVerbraucherPVundNetz()  
         myPrint("Autoinit: Schalte auf PV und Netz")            
-    elif BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleAkku"]:
+    elif SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleAkku"]:
         schalteAlleWrAufAkku()
         myPrint("Autoinit: Schalte auf Akku")    
 
 
 EntladeFreigabeGesendet = False
 NetzLadenAusGesperrt = False
+
+def passeSchaltschwellenAn():
+    global SkriptWerte
+
+    #SOC Schaltschwellen
+    SkriptWerte["schaltschwelleNetzLadenaus"] = 10.0
+    SkriptWerte["schaltschwelleNetzLadenein"] = 7.0
+    SkriptWerte["MinSoc"] = 10.0
+    SkriptWerte["verbrauchNachtAkku"] = 25.0
+    SkriptWerte["verbrauchNachtNetz"] = 3.0
+    
+    if SkriptWerte["Akkuschutz"]:
+        if "schaltschwelleAkku" in SkriptWerte and SkriptWerte["schaltschwelleAkku"] != 60.0:
+            sendeMqtt = True
+        SkriptWerte["schaltschwelleAkku"] = 60.0
+        SkriptWerte["schaltschwellePvNetz"] = 40.0
+        SkriptWerte["schaltschwelleNetz"] = 30.0
+    else:
+        if "schaltschwelleAkku" in SkriptWerte and SkriptWerte["schaltschwelleAkku"] != 45.0:
+            sendeMqtt = True
+        SkriptWerte["schaltschwelleAkku"] = 45.0
+        SkriptWerte["schaltschwellePvNetz"] = 20.0
+        SkriptWerte["schaltschwelleNetz"] = 15.0
+        
+    # Wetter Sonnenstunden Schaltschwellen
+    SkriptWerte["wetterSchaltschwelleNetz"] = 6    
 
 def setInverterMode(wetterDaten):
     global SkriptWerte
@@ -376,25 +421,8 @@ def setInverterMode(wetterDaten):
     now = datetime.datetime.now()
     sendeMqtt = False
     
-    #SOC Schaltschwellen
-    SkriptWerte["schaltschwelleNetzLadenaus"] = 10.0
-    SkriptWerte["schaltschwelleNetzLadenein"] = 7.0
-    SkriptWerte["MinSoc"] = 10.0
-    SkriptWerte["verbrauchNachtAkku"] = 25.0
-    SkriptWerte["verbrauchNachtNetz"] = 3.0
+    passeSchaltschwellenAn()
     
-    if BmsWerte["Akkuschutz"]:
-        SkriptWerte["schaltschwelleAkku"] = 60.0
-        SkriptWerte["schaltschwellePvNetz"] = 40.0
-        SkriptWerte["schaltschwelleNetz"] = 30.0
-    else:
-        SkriptWerte["schaltschwelleAkku"] = 45.0
-        SkriptWerte["schaltschwellePvNetz"] = 20.0
-        SkriptWerte["schaltschwelleNetz"] = 15.0
-        
-    # Wetter Sonnenstunden Schaltschwellen
-    SkriptWerte["wetterSchaltschwelleNetz"] = 6
-        
     # Wenn init gesetzt ist und das BMS einen Akkuwert gesendet hat dann stellen wir einen Initial Zustand der Wr her
     if AutoInitWrMode == True and BmsWerte["AkkuProz"] != InitAkkuProz:
         AutoInitWrMode = False
@@ -403,10 +431,10 @@ def setInverterMode(wetterDaten):
         
     # Wir setzen den Error bei 100 prozent zurück. In der Hoffunng dass nicht immer 100 prozent vom BMS kommen dieses fängt aber bei einem Neustart bei 0 proz an.
     if BmsWerte["AkkuProz"] >= 100.0:
-        BmsWerte["Error"] = False
+        SkriptWerte["Error"] = False
     
     # Wir prüfen als erstes ob die Freigabe vom BMS da ist und kein Akkustand Error vorliegt
-    if BmsWerte["BmsEntladeFreigabe"] == True and BmsWerte["Error"] == False:
+    if BmsWerte["BmsEntladeFreigabe"] == True and SkriptWerte["Error"] == False:
             # Wir wollen abschätzen ob wir auf Netz schalten müssen dazu soll abends geprüft werden ob noch genug energie für die Nacht zur verfügung steht
             # Dazu wird geprüft wie das Wetter (Sonnenstunden) am nächsten Tag ist und dementsprechend früher oder später umgeschaltet.
             # Wenn das Wetter am nächsten Tag schlecht ist macht es keinen Sinn den Akku leer zu machen und dann im Falle einer Unterspannung vom Netz laden zu müssen.
@@ -479,8 +507,7 @@ def setInverterMode(wetterDaten):
         if BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
             # Wenn eine Unterspannnung SOC > schaltschwelleNetzLadenaus ausgelöst wurde dann stimmt mit dem SOC etwas nicht der wird bei schaltschwelle PVNEtz wieder zurück gesetzt
             NetzLadenAusGesperrt = True
-            BmsWerte["Akkuschutz"] = True
-            sendeMqtt = True
+            SkriptWerte["Akkuschutz"] = True
             myPrint("Error: Ladestand weicht ab")
         # wir setzen einen error weil das nicht plausibel ist und wir hin und her schalten sollte die freigabe wieder kommen
         if BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwellePvNetz"]:
@@ -497,18 +524,19 @@ def setInverterMode(wetterDaten):
             myPrint(BmsWerte)
         except:
             myPrint("mqtt konnte nicht gesendet werden")
+        sendeSkriptDaten()
 
 
 def GetAndSendEffektaData(name, serial, beVerbose):
 
     
-    global BattCurrent
+    global SocMonitorWerte
     global EffektaData
     sendeMqtt = False
     
     WR = EffektaConn(name, serial, beVerbose)
     
-    EffektaData[WR.EffektaName()]["EffektaWerte"] = {"timeStamp": 0, "Netzspannung": 0, "AcOutPowerW": 0, "PvPower": 0, "BattChargCurr": 0, "BattDischargCurr": 0, "ActualMode": "", "DailyProduction": 0.0, "CompleteProduction": 0, "DailyCharge": 0.0, "DailyDischarge": 0.0}
+    EffektaData[WR.EffektaName()]["EffektaWerte"] = {"timeStamp": 0, "Netzspannung": 0, "AcOutPowerW": 0, "PvPower": 0, "BattChargCurr": 0, "BattDischargCurr": 0, "ActualMode": "", "DailyProduction": 0.0, "CompleteProduction": 0, "DailyCharge": 0.0, "DailyDischarge": 0.0, "BattCapacity": 0, "DeviceStatus2": "", "BattVoltage": 0.0}
     
     effekta_Query_Cycle = 20
     writeErrors = 0
