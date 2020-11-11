@@ -55,14 +55,16 @@ SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":
 client = mqtt.Client() 
 
 def myPrint(msg):
+    if beVerbose:
+        print(msg)
     temp = msg.split()
-    if "Info:" in temp or "Error:" in temp:
+    if "Info:" in temp or "Error:" in temp or "Autoinit:" in temp:
         try:
             client.publish("PV/Skript/Info", msg)
         except:
-            myPrint("mqtt konnte nicht gesendet werden")
-    if beVerbose:
-        print(msg)
+            if beVerbose:
+                print("myPrint: mqtt konnte nicht gesendet werden")
+        
 def sendeSkriptDaten():
     global SkriptWerte
         
@@ -176,7 +178,7 @@ def schalteAlleWrAufAkku():
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append(BattLeer)    # Batt undervoltage
         EffektaData[i]["EffektaCmd"].append(BattWiederEntladen)   # redischarge voltage
-        #EffektaData[i]["EffektaCmd"].append("PDJ")       # PowerSaving disable PDJJJ
+        #EffektaData[i]["EffektaCmd"].append("PDj")       # PowerSaving disable PDJJJ
         EffektaData[i]["EffektaCmd"].append(VerbraucherAkku)       # load prio 00=Netz, 02=Batt
         EffektaData[i]["EffektaCmd"].append("PCP03")       # charge prio 02=Netz und pv, 03=pv
         
@@ -203,7 +205,9 @@ def schalteAlleWrNetzLadenEin():
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
         EffektaData[i]["EffektaCmd"].append("MUCHGC002")   # Netz Ladestrom  
-    BmsWerte["WrNetzladen"] = True
+        
+    SkriptWerte["WrNetzladen"] = True
+    sendeSkriptDaten()
 
 def schalteAlleWrNetzSchnellLadenEin():
     # Funktion ok, wr schaltet netzladen ein
@@ -435,95 +439,100 @@ def setInverterMode(wetterDaten):
     
     # Wir prüfen als erstes ob die Freigabe vom BMS da ist und kein Akkustand Error vorliegt
     if BmsWerte["BmsEntladeFreigabe"] == True and SkriptWerte["Error"] == False:
+        # Wir wollen erst prüfen ob das skript automatisch schalten soll.
+        if SkriptWerte["SkriptMode"] == "Auto":
             # Wir wollen abschätzen ob wir auf Netz schalten müssen dazu soll abends geprüft werden ob noch genug energie für die Nacht zur verfügung steht
             # Dazu wird geprüft wie das Wetter (Sonnenstunden) am nächsten Tag ist und dementsprechend früher oder später umgeschaltet.
             # Wenn das Wetter am nächsten Tag schlecht ist macht es keinen Sinn den Akku leer zu machen und dann im Falle einer Unterspannung vom Netz laden zu müssen.
             # Die Prüfung ist nur Abends aktiv da man unter Tags eine andere Logig haben möchte.
-        #now = datetime.datetime.now()
-        if now.hour >= 17 and now.hour < 23:
-        #if Zeit >= 17 and Zeit < 23:
-            if "Tag_1" in wetterDaten:
-                if wetterDaten["Tag_1"] != None:
-                    if wetterDaten["Tag_1"]["Sonnenstunden"] <= SkriptWerte["wetterSchaltschwelleNetz"]:
-                    # Wir wollen den Akku schonen weil es nichts bringt wenn wir ihn leer machen
-                        if BmsWerte["AkkuProz"] < (SkriptWerte["verbrauchNachtAkku"] + SkriptWerte["MinSoc"]):
-                            if BmsWerte["WrMode"] == VerbraucherAkku:
-                                BmsWerte["Akkuschutz"] = True
-                                sendeMqtt = True
-                                schalteAlleWrAufNetzOhneNetzLaden()
-                                myPrint("Info: Sonne morgen < %ih -> schalte auf Netz." %SkriptWerte["wetterSchaltschwelleNetz"])
-                else:
-                    myPrint("Info: Keine Wetterdaten")
-        elif now.hour >= 8:
-        #elif Zeit >= 8:
-            # Ab hier beginnnt der Teil der die Anlage stufenweise wieder auf Akkubetrieb schaltet 
-            # dieser Teil soll Tagsüber aktiv sein das macht Nachts keinen Sinn weil der Akkustand nicht steigt
-            EntladeFreigabeGesendet = False
-            # Wenn der Akku wieder über die schaltschwelleAkku ist dann wird er wieder Tag und Nacht genutzt
-            if not BmsWerte["WrMode"] == VerbraucherAkku and BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleAkku"]:
-                schalteAlleWrAufAkku()
-                BmsWerte["Akkuschutz"] = False
-                sendeMqtt = True
-                myPrint("Info: Schalte alle WR auf Akku")
-            # Wenn der Akku über die schaltschwellePvNetz ist dann geben wir den Akku wieder frei wenn PV verfügbar ist. PV (Tag), Netz (Nacht)
-            elif BmsWerte["WrMode"] == VerbraucherNetz and BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwellePvNetz"]:
-                # Hier wird explizit nur geschalten wenn der WR auf VerbraucherNetz steht damit der Zweig nur reagiert wenn der Akku leer war und voll wird 
+            # In der Sommerzeit löst now.hour = 17 um 18 Uhr aus, In der Winterzeit dann um 17 Uhr
+            if now.hour >= 17 and now.hour < 23:
+            #if Zeit >= 17 and Zeit < 23:
+                if "Tag_1" in wetterDaten:
+                    if wetterDaten["Tag_1"] != None:
+                        if wetterDaten["Tag_1"]["Sonnenstunden"] <= SkriptWerte["wetterSchaltschwelleNetz"]:
+                        # Wir wollen den Akku schonen weil es nichts bringt wenn wir ihn leer machen
+                            if SocMonitorWerte["Prozent"] < (SkriptWerte["verbrauchNachtAkku"] + SkriptWerte["MinSoc"]):
+                                if SkriptWerte["WrMode"] == VerbraucherAkku:
+                                    SkriptWerte["Akkuschutz"] = True
+                                    passeSchaltschwellenAn()
+                                    schalteAlleWrAufNetzOhneNetzLaden()
+                                    myPrint("Info: Sonne morgen < %ih -> schalte auf Netz." %SkriptWerte["wetterSchaltschwelleNetz"])
+                    else:
+                        myPrint("Info: Keine Wetterdaten!")
+            # In der Sommerzeit löst now.hour = 17 um 18 Uhr aus, In der Winterzeit dann um 17 Uhr
+            elif now.hour >= 12 and now.hour < 23:
+            #if Zeit >= 17 and Zeit < 23:
+                if "Tag_0" in wetterDaten:
+                    if wetterDaten["Tag_0"] != None and wetterDaten["Tag_1"] != None:
+                        if wetterDaten["Tag_0"]["Sonnenstunden"] <= SkriptWerte["wetterSchaltschwelleNetz"] and wetterDaten["Tag_1"]["Sonnenstunden"] <= SkriptWerte["wetterSchaltschwelleNetz"]:
+                        # Wir wollen den Akku schonen weil es nichts bringt wenn wir ihn leer machen
+                            if SocMonitorWerte["Prozent"] < (SkriptWerte["verbrauchNachtAkku"] + SkriptWerte["MinSoc"]):
+                                if SkriptWerte["WrMode"] == VerbraucherAkku or SkriptWerte["WrMode"] == VerbraucherPVundNetz:
+                                    SkriptWerte["Akkuschutz"] = True
+                                    passeSchaltschwellenAn()
+                                    schalteAlleWrAufNetzOhneNetzLaden()
+                                    myPrint("Info: Sonne heute und morgen < %ih -> schalte auf Netz." %SkriptWerte["wetterSchaltschwelleNetz"])
+                    else:
+                        myPrint("Info: Keine Wetterdaten!")
+
+            if now.hour >= 8 and now.hour < 17:
+            #elif Zeit >= 8:
+                # Ab hier beginnnt der Teil der die Anlage stufenweise wieder auf Akkubetrieb schaltet 
+                # dieser Teil soll Tagsüber aktiv sein das macht Nachts keinen Sinn weil der Akkustand nicht steigt
+                EntladeFreigabeGesendet = False
+                # Wenn der Akku wieder über die schaltschwelleAkku ist dann wird er wieder Tag und Nacht genutzt
+                if not SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleAkku"]:
+                    SkriptWerte["Akkuschutz"] = False
+                    schalteAlleWrAufAkku()
+                    myPrint("Info: Schalte alle WR auf Akku")
+                # Wenn der Akku über die schaltschwellePvNetz ist dann geben wir den Akku wieder frei wenn PV verfügbar ist. PV (Tag), Netz (Nacht)
+                elif SkriptWerte["WrMode"] == VerbraucherNetz and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwellePvNetz"]:
+                    # Hier wird explizit nur geschalten wenn der WR auf VerbraucherNetz steht damit der Zweig nur reagiert wenn der Akku leer war und voll wird 
+                    schalteAlleWrNetzLadenAus()
+                    NetzLadenAusGesperrt = False
+                    schalteAlleWrVerbraucherPVundNetz()
+                    myPrint("Info: Schalte alle WR Verbraucher PV und Netz")
+            # Ab hier beginnt der Teil der die Anlage auf  Netz schaltet sowie das Netzladen ein und aus schaltet
+            # Wir schalten auf Netz wenn der min Soc unterschritten wird
+            if SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] <= SkriptWerte["MinSoc"]:
+                schalteAlleWrAufNetzOhneNetzLaden()
+                myPrint("Schalte alle WR Netz ohne laden. MinSOC.")
+                myPrint("Info: MinSoc %iP erreicht -> schalte auf Netz." %SkriptWerte["MinSoc"])
+            # Wenn das Netz Laden durch eine Unterspannungserkennung eingeschaltet wurde schalten wir es aus wenn der Akku wieder 10% hat
+            elif SkriptWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
                 schalteAlleWrNetzLadenAus()
-                schalteAlleWrVerbraucherPVundNetz()
-                NetzLadenAusGesperrt = False
-                sendeMqtt = True
-                myPrint("Info: Schalte alle WR Verbraucher PV und Netz")
-        # Ab hier beginnt der Teil der die Anlage auf  Netz schaltet sowie das Netzladen ein und aus schaltet
-        # Wir schalten auf Netz wenn der min Soc unterschritten wird
-        if BmsWerte["WrMode"] == VerbraucherAkku and BmsWerte["AkkuProz"] <= SkriptWerte["MinSoc"]:
-            schalteAlleWrAufNetzOhneNetzLaden()
-            sendeMqtt = True
-            myPrint("Schalte alle WR Netz ohne laden. MinSOC.")
-            myPrint("Info: MinSoc %iP erreicht -> schalte auf Netz." %SkriptWerte["MinSoc"])
-        # Wenn das Netz Laden durch eine Unterspannungserkennung eingeschaltet wurde schalten wir es aus wenn der Akku wieder 10% hat
-        elif BmsWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
-            schalteAlleWrNetzLadenAus()
-            sendeMqtt = True
-            myPrint("Schalte alle WR Netz laden aus")
-            myPrint("Info: NetzLadenaus %iP erreicht -> schalte Laden aus." %SkriptWerte["schaltschwelleNetzLadenaus"])
-        # Wenn die Verbraucher auf PV (Tag) und Netz (Nacht) geschaltet wurden und der Akku wieder unter die schaltschwelleNetz fällt dann wird auf Netz geschaltet
-        elif BmsWerte["WrMode"] == VerbraucherPVundNetz and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetz"]:
-            schalteAlleWrAufNetzOhneNetzLaden()
-            sendeMqtt = True
-            myPrint("Info: Schalte auf Netz")
-        elif BmsWerte["WrMode"] != VerbraucherAkku and BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == False and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetzLadenaus"] and BmsWerte["AkkuProz"] > 0.0:
-            BmsWerte["Akkuschutz"] = True
-            sendeMqtt = True
-            myPrint("Schalte Akkuschutz ein")
-            myPrint("Info: %iP erreicht -> schalte Akkuschutz ein." %SkriptWerte["schaltschwelleNetzLadenaus"])
-        elif BmsWerte["WrNetzladen"] == False and BmsWerte["Akkuschutz"] == True and BmsWerte["AkkuProz"] <= SkriptWerte["schaltschwelleNetzLadenein"]:
-            schalteAlleWrNetzLadenEin()
-            sendeMqtt = True
-            myPrint("Info: Schalte Netz mit laden")
+                myPrint("Schalte alle WR Netz laden aus")
+                myPrint("Info: NetzLadenaus %iP erreicht -> schalte Laden aus." %SkriptWerte["schaltschwelleNetzLadenaus"])
+            # Wenn die Verbraucher auf PV (Tag) und Netz (Nacht) geschaltet wurden und der Akku wieder unter die schaltschwelleNetz fällt dann wird auf Netz geschaltet
+            elif SkriptWerte["WrMode"] == VerbraucherPVundNetz and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetz"]:
+                schalteAlleWrAufNetzOhneNetzLaden()
+                myPrint("Info: Schalte auf Netz")
+            elif SkriptWerte["WrMode"] != VerbraucherAkku and SkriptWerte["WrNetzladen"] == False and SkriptWerte["Akkuschutz"] == False and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetzLadenaus"] and SocMonitorWerte["Prozent"] > 0.0:
+                SkriptWerte["Akkuschutz"] = True
+                myPrint("Schalte Akkuschutz ein")
+                myPrint("Info: %iP erreicht -> schalte Akkuschutz ein." %SkriptWerte["schaltschwelleNetzLadenaus"])
+            elif SkriptWerte["WrNetzladen"] == False and SkriptWerte["Akkuschutz"] == True and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetzLadenein"]:
+                schalteAlleWrNetzLadenEin()
+                myPrint("Info: Schalte Netz mit laden")
     elif EntladeFreigabeGesendet == False:
         EntladeFreigabeGesendet = True
         schalteAlleWrAufNetzMitNetzladen()
         # Falls der Akkustand zu hoch ist würde nach einer Abschaltung das Netzladen gleich wieder abgeschaltet werden das wollen wir verhindern
-        if BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
+        myPrint("Info: Schalte auf Netz mit laden")
+        if SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
             # Wenn eine Unterspannnung SOC > schaltschwelleNetzLadenaus ausgelöst wurde dann stimmt mit dem SOC etwas nicht der wird bei schaltschwelle PVNEtz wieder zurück gesetzt
             NetzLadenAusGesperrt = True
             SkriptWerte["Akkuschutz"] = True
             myPrint("Error: Ladestand weicht ab")
         # wir setzen einen error weil das nicht plausibel ist und wir hin und her schalten sollte die freigabe wieder kommen
-        if BmsWerte["AkkuProz"] >= SkriptWerte["schaltschwellePvNetz"]:
-            BmsWerte["Error"] = True
+        if SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwellePvNetz"]:
+            SkriptWerte["Error"] = True
             myPrint("Error: Ladestand nicht plausibel")
         sendeMqtt = True
-        myPrint("Info: Schalte auf Netz mit laden")
 
     if sendeMqtt == True: 
         sendeMqtt = False
-        try: 
-            client.publish("PV/BMS/istwerte", json.dumps(BmsWerte))
-            client.publish("PV/Skript/istwerte", json.dumps(SkriptWerte))
-            myPrint(BmsWerte)
-        except:
-            myPrint("mqtt konnte nicht gesendet werden")
         sendeSkriptDaten()
 
 
