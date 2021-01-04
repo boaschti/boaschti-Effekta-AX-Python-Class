@@ -116,8 +116,12 @@ def on_message(client, userdata, msg):
             schalteAlleWrVerbraucherPVundNetz();
         if str(msg.payload.decode()) == "AkkuschutzEin":
             SkriptWerte["Akkuschutz"] = True
+            passeSchaltschwellenAn()
+            sendeSkriptDaten()
         if str(msg.payload.decode()) == "AkkuschutzAus":
             SkriptWerte["Akkuschutz"] = False
+            passeSchaltschwellenAn()
+            sendeSkriptDaten()
         if str(msg.payload.decode()) == "NetzLadenAus":
             schalteAlleWrNetzLadenAus()
         if str(msg.payload.decode()) == "NetzLadenEin":
@@ -128,6 +132,7 @@ def on_message(client, userdata, msg):
             SocMonitorWerte["Commands"] = str(msg.payload.decode())
         if str(msg.payload.decode()) == "Auto" or str(msg.payload.decode()) == "Manual":
             SkriptWerte["SkriptMode"] = str(msg.payload.decode())
+            sendeSkriptDaten()
             
     # get CompleteProduction from MQTT
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "CompleteProduction":
@@ -638,6 +643,8 @@ def setInverterMode(wetterDaten):
             myPrint("Error: Ladestand nicht plausibel")
         sendeMqtt = True
 
+    passeSchaltschwellenAn()
+    
     if sendeMqtt == True: 
         sendeMqtt = False
         sendeSkriptDaten()
