@@ -84,6 +84,7 @@ def on_connect(client, userdata, flags, rc):
     # subscribe or resubscribe effektas
     for name in list(EffektaData.keys()):
         client.subscribe("PV/" + name + "/command")
+        client.subscribe("PV/" + name + "/request")
     
     client.subscribe("PV/allWr/command")
 
@@ -99,7 +100,12 @@ def on_message(client, userdata, msg):
     # single Effekta commands
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "command":
         EffektaData[tempTopicList[1]]["EffektaCmd"].append(str(msg.payload.decode()))
-
+    
+    # Effekta requests
+    if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "request":
+        EffektaData[tempTopicList[1]]["query"]["cmd"] = str(msg.payload.decode())
+        EffektaData[tempTopicList[1]]["query"]["getValue"] = True
+        
     # all Effekta/Skript commands
     if tempTopicList[1] == "allWr" and tempTopicList[2] == "command":
         if str(msg.payload.decode()) == "WrAufAkku":
@@ -645,7 +651,7 @@ def GetAndSendEffektaData(name, serial, beVerbose):
     sendeMqtt = False
     
     WR = EffektaConn(name, serial, beVerbose)
-    
+    EffektaData[WR.EffektaName()]["query"] = {"cmd":"", "response":"", "getValue": False}
     EffektaData[WR.EffektaName()]["EffektaWerte"] = {"timeStamp": 0, "Netzspannung": 0, "AcOutPowerW": 0, "PvPower": 0, "BattChargCurr": 0, "BattDischargCurr": 0, "ActualMode": "", "DailyProduction": 0.0, "CompleteProduction": 0, "DailyCharge": 0.0, "DailyDischarge": 0.0, "BattCapacity": 0, "DeviceStatus2": "", "BattVoltage": 0.0}
     
     effekta_Query_Cycle = 20
@@ -720,6 +726,15 @@ def GetAndSendEffektaData(name, serial, beVerbose):
             tempDailyCharge = 0.0
             
         
+        sendeQuery = False
+        # prüfen ob ein wert abgefragt werden soll und ggf dies auch durchführen
+        if EffektaData[WR.EffektaName()]["query"]["getValue"] == True:
+            EffektaData[WR.EffektaName()]["query"]["response"] = ""
+            EffektaData[WR.EffektaName()]["query"]["response"] = WR.getEffektaData(EffektaData[WR.EffektaName()]["query"]["cmd"])
+            EffektaData[WR.EffektaName()]["query"]["getValue"] = False
+            sendeQuery = True
+            sendeMqtt = True            
+        
         # sende Kommandos aus der EffektaCmd Liste. Wenn das Kommando erfolreich gesendet wurde löschen wir es sofort ansonsten probieren wir es noch
         # weitere 9 mal und geben dann einen Error per MQTT zurück
         if len(EffektaData[WR.EffektaName()]["EffektaCmd"]) > 0:
@@ -759,6 +774,9 @@ def GetAndSendEffektaData(name, serial, beVerbose):
                 client.publish(topic, json.dumps(EffektaData[WR.EffektaName()]["EffektaWerte"]))
                 topic = "PV/" + WR.EffektaName() + "/CompleteProduction"
                 client.publish(topic, str(EffektaData[WR.EffektaName()]["EffektaWerte"]["CompleteProduction"]), retain=True)
+                if sendeQuery:
+                    topic = "PV/" + WR.EffektaName() + "/query"
+                    client.publish(topic, json.dumps(EffektaData[WR.EffektaName()]["query"]))
             except:
                 myPrint("%s: mqtt konnte nicht gesendet werden"%WR.EffektaName())
     
