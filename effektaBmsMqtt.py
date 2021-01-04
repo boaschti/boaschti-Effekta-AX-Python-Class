@@ -95,10 +95,17 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     global EffektaData
     global SkriptWerte
+    global AutoInitWrMode
     
     tempTopic = str(msg.topic)
     tempTopicList = tempTopic.split("/")
     
+    if tempTopicList[1] == "Skript" and tempTopicList[2] == "istwerte":
+        # Wir haben die alten Daten vom MQTT Server bekommen und müssen nicht initialisieren
+        SkriptWerte.update(json.loads(str(msg.payload.decode())))
+        AutoInitWrMode = False
+        client.unsubscribe("PV/Skript/istwerte")
+        
     # single Effekta commands
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "command":
         EffektaData[tempTopicList[1]]["EffektaCmd"].append(str(msg.payload.decode()))
@@ -607,7 +614,7 @@ def setInverterMode(wetterDaten):
                 schalteAlleWrNetzLadenAus()
                 NetzLadenAusGesperrt = False
                 schalteAlleWrVerbraucherPVundNetz()
-                    myPrint("Info: Schalte alle WR Verbraucher PV und Netz")
+                myPrint("Info: Schalte alle WR Verbraucher PV und Netz")
             # Ab hier beginnt der Teil der die Anlage auf  Netz schaltet sowie das Netzladen ein und aus schaltet
             # Wir schalten auf Netz wenn der min Soc unterschritten wird
             if SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] <= SkriptWerte["MinSoc"]:
@@ -890,6 +897,15 @@ if not AutoInitWrMode:
     else:
         schalteAlleWrAufNetzOhneNetzLaden()
         myPrint("ManualInit: schalte auf Netz ohne Laden")    
+else:
+    myPrint("subscribe to get skript data")
+    client.subscribe("PV/Skript/istwerte")
+    # Warten bis evtl eine Nachricht per MQTT kommt weil es kann mit schalteAlleWrAufAkku() oder schalteAlleWrAufNetzMitNetzladen() konflikte geben
+    time.sleep(1)    
+    client.unsubscribe("PV/Skript/istwerte")
+    # Wenn daten angekommen sind dann wurde die Variable auf false gesetzt
+    if not AutoInitWrMode:
+        myPrint("Autoinit: Alte Daten wurden verwendet")
         
 myPrint("starte main loop")
 
