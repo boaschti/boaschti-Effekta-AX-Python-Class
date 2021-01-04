@@ -590,22 +590,23 @@ def setInverterMode(wetterDaten):
                     else:
                         myPrint("Info: Keine Wetterdaten!")
 
-            if now.hour >= 8 and now.hour < 17:
+            #if now.hour >= 8 and now.hour < 17:
             #elif Zeit >= 8:
-                # Ab hier beginnnt der Teil der die Anlage stufenweise wieder auf Akkubetrieb schaltet 
                 # dieser Teil soll Tagsüber aktiv sein das macht Nachts keinen Sinn weil der Akkustand nicht steigt
-                EntladeFreigabeGesendet = False
-                # Wenn der Akku wieder über die schaltschwelleAkku ist dann wird er wieder Tag und Nacht genutzt
-                if not SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleAkku"]:
-                    SkriptWerte["Akkuschutz"] = False
-                    schalteAlleWrAufAkku()
-                    myPrint("Info: Schalte alle WR auf Akku")
-                # Wenn der Akku über die schaltschwellePvNetz ist dann geben wir den Akku wieder frei wenn PV verfügbar ist. PV (Tag), Netz (Nacht)
-                elif SkriptWerte["WrMode"] == VerbraucherNetz and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwellePvNetz"]:
-                    # Hier wird explizit nur geschalten wenn der WR auf VerbraucherNetz steht damit der Zweig nur reagiert wenn der Akku leer war und voll wird 
-                    schalteAlleWrNetzLadenAus()
-                    NetzLadenAusGesperrt = False
-                    schalteAlleWrVerbraucherPVundNetz()
+                # warum weis ich nicht mehr deswegen wieder ausgebaut es funktioniert z.b. nicht mehr nach 17 uhr dass man die anlage auf Auto stellt
+                
+            # Ab hier beginnnt der Teil der die Anlage stufenweise wieder auf Akkubetrieb schaltet 
+            # Wenn der Akku wieder über die schaltschwelleAkku ist dann wird er wieder Tag und Nacht genutzt
+            if not SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleAkku"]:
+                SkriptWerte["Akkuschutz"] = False
+                schalteAlleWrAufAkku()
+                myPrint("Info: Schalte alle WR auf Akku")
+            # Wenn der Akku über die schaltschwellePvNetz ist dann geben wir den Akku wieder frei wenn PV verfügbar ist. PV (Tag), Netz (Nacht)
+            elif SkriptWerte["WrMode"] == VerbraucherNetz and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwellePvNetz"]:
+                # Hier wird explizit nur geschalten wenn der WR auf VerbraucherNetz steht damit der Zweig nur reagiert wenn der Akku leer war und voll wird 
+                schalteAlleWrNetzLadenAus()
+                NetzLadenAusGesperrt = False
+                schalteAlleWrVerbraucherPVundNetz()
                     myPrint("Info: Schalte alle WR Verbraucher PV und Netz")
             # Ab hier beginnt der Teil der die Anlage auf  Netz schaltet sowie das Netzladen ein und aus schaltet
             # Wir schalten auf Netz wenn der min Soc unterschritten wird
