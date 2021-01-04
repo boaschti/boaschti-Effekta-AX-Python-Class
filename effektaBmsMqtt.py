@@ -46,13 +46,9 @@ VerbraucherAkku = "POP02"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, we
 BattLeer = "PSDV43.0"
 BattWiederEntladen = "PBDV48.0"
 
-BattCurrent = 0.0     # BattCurrent updated with higher frequency
 InitAkkuProz = -1
-#BmsWerte = {"AkkuStrom": BattCurrent, "Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "AkkuProz": InitAkkuProz, "Ladephase": "none", "BmsEntladeFreigabe":True}
 BmsWerte = {"Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "Ladephase": "none", "BmsEntladeFreigabe":True}
-
 SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":"", "SkriptMode":"Auto"}
-
 
 client = mqtt.Client() 
 
@@ -284,7 +280,7 @@ def schalteAlleWrAufNetzMitNetzladen():
     SkriptWerte["WrNetzladen"] = True
     sendeSkriptDaten()
 
-SocMonitorWerte = {"Commands":[], "Ah":-1, "Current":0, "Prozent":InitAkkuProz}
+SocMonitorWerte = {"Commands":[], "Ah":-1, "Current":0, "Prozent":InitAkkuProz, "FloatingMode": False}
 
 def GetSocData():
     global SocMonitorWerte
@@ -299,7 +295,28 @@ def GetSocData():
 
     
     sendeMqtt = False
+    resetSocSended = False
+    
     while 1:    
+        
+        # Wir wollen prüfen ob der Akku laut Laderegler voll ist und der SOCMonitor auf voll gesetzt werden soll
+        SocMonitorWerte["FloatingMode"] = False
+        for name in list(EffektaData.keys()):
+            floatmode = list(EffektaData[name]["EffektaWerte"]["DeviceStatus2"])
+            if len(floatmode) > 0:
+                if floatmode[0] == "1":
+                    SocMonitorWerte["FloatingMode"] = True
+        
+        if SocMonitorWerte["FloatingMode"] == True and resetSocSended == False:
+            resetSocSended = True
+            SocMonitorWerte["Commands"].append("socResetMaxAndHold")
+            # Wir schalten die Anlage auch wieder auf Automatisch
+            SkriptWerte["SkriptMode"] = "Auto"
+            myPrint("Info: Akku voll. Anlage wird auf Auto gestellt.")
+            
+        if SocMonitorWerte["FloatingMode"] == False and resetSocSended == True:
+            resetSocSended = False
+            
         try:
             x = serialSocMonitor.readline()
         except:
@@ -314,13 +331,13 @@ def GetSocData():
             y = x.split()
             for i in y:
                 if i == b'Current' and y[1] == b'A':
-                    if checkWerteSprung(float(y[2]), SocMonitorWerte["Current"], 15, -200, 200):
+                    if checkWerteSprung(float(y[2]), SocMonitorWerte["Current"], 20, -200, 200):
                         sendeMqtt = True  
                     SocMonitorWerte["Current"] = float(y[2])
                 elif i == b'Prozent':
-                    if checkWerteSprung(float(y[2]), SocMonitorWerte["Prozent"], 1, -1, 101):
+                    if checkWerteSprung(int(y[2]), SocMonitorWerte["Prozent"], 1, -1, 101):
                         sendeMqtt = True                  
-                    SocMonitorWerte["Prozent"] = float(y[2])       
+                    SocMonitorWerte["Prozent"] = int(y[2])       
                 elif i == b'Ah':
                     if checkWerteSprung(float(y[2]), SocMonitorWerte["Ah"], 1, -1, 500):
                         sendeMqtt = True                        
@@ -345,101 +362,111 @@ def GetSocData():
             tempcmd = SocMonitorWerte["Commands"][0]
             cmd = tempcmd.encode('utf-8')
             cmd = cmd + b'\n'
-            print("send command")
-            print(cmd)
-            print(SocMonitorWerte["Commands"])
-            if serialSocMonitor.write(cmd):
+            myPrint("send command")
+            try:
+                if serialSocMonitor.write(cmd):
+                    del SocMonitorWerte["Commands"][0]
+            except:
+                myPrint("Error: SocMonitor Commands konnten nicht gesendet werden. Command wird verworfen.")
                 del SocMonitorWerte["Commands"][0]
                 
         myPrint(x)
 
 def GetAndSendBmsData():
-    global BattCurrent
     global BmsWerte
     
-    sendeMqtt = False
-    lastLine = False
-    # Wir lesen alle Zeilen der Serial parsen nach Schlüsselwörten und holen uns die Werte raus.
-    # Es kann sein, dass Übertragungsfehler auftreten, in dem Fall fängt das das try except bez die Prüfung des Wertebereichs ab.
-    x = serBMS.readline()
-    y = x.split()
-    for i in y:
-#        if i == b'Strom':
-#            try:
-#                if checkWerteSprung(float(y[3]), BmsWerte["AkkuStrom"], 20, -1000, 1000):
-#                    sendeMqtt = True
-#                    BmsWerte["AkkuStrom"] = float(y[3])
-#                    BattCurrent = BmsWerte["AkkuStrom"]
-#            except:
-#                myPrint("convertError")
-#            break
-        if i == b'Kleinste':
-            try:   
-                if checkWerteSprung(float(y[2]), BmsWerte["Vmin"], 1, -1, 10):
-                    sendeMqtt = True
-                    BmsWerte["Vmin"] = float(y[2])
-            except:
-                myPrint("convertError")
-            break
-        if i == b'Groeste':
-            try:
-                if checkWerteSprung(float(y[2]), BmsWerte["Vmax"], 1, -1, 10):
-                    sendeMqtt = True
-                    BmsWerte["Vmax"] = float(y[2])
-            except:
-                myPrint("convertError")
-            break
-        if i == b'SOC':
-            try:
-                if checkWerteSprung(float(y[1]), BmsWerte["AkkuAh"], 5, -2000, 2000): 
-                    sendeMqtt = True
-                    BmsWerte["AkkuAh"] = float(y[1])
-            except:
-                myPrint("convertError")
-        #if i == b'SOC':
-        #    try:
-        #        if BmsWerte["AkkuProz"] == InitAkkuProz:
-        #            if checkWerteSprung(float(y[3]), BmsWerte["AkkuProz"], 1, -101, 101): 
-        #                sendeMqtt = True
-        #                BmsWerte["AkkuProz"] = float(y[3])
-        #        else:
-        #            if checkWerteSprung(float(y[3]), BmsWerte["AkkuProz"], 1, -101, 101) and checkWerteSprungMaxJump(float(y[3]), BmsWerte["AkkuProz"], 10): 
-        #                sendeMqtt = True
-        #                BmsWerte["AkkuProz"] = float(y[3])
-        #    except:
-        #        myPrint("convertError")
-        #    break
-        if i == b'Ladephase:':
-            lastLine = True
-            try:
-                if BmsWerte["Ladephase"] != y[1].decode():
-                    sendeMqtt = True
-                BmsWerte["Ladephase"] = y[1].decode()
-            except:
-                myPrint("convertError")
-            break 
+    serBMS = serial.Serial(BmsSerial, 9600)  # open serial port
     
-    
-    if x == b'Rel fahren 1\r\n':
-        if BmsWerte["BmsEntladeFreigabe"] == False:
-            BmsWerte["BmsEntladeFreigabe"] = True
-            sendeMqtt = True
-    elif x == b'Rel fahren 0\r\n':
-        if BmsWerte["BmsEntladeFreigabe"] == True:
-            BmsWerte["BmsEntladeFreigabe"] = False
-            sendeMqtt = True
-            
-    if sendeMqtt == True: 
+    while 1:
         sendeMqtt = False
-        try: 
-            client.publish("PV/BMS/istwerte", json.dumps(BmsWerte))
-            myPrint(BmsWerte)
+        lastLine = False
+        # Wir lesen alle Zeilen der Serial parsen nach Schlüsselwörten und holen uns die Werte raus.
+        # Es kann sein, dass Übertragungsfehler auftreten, in dem Fall fängt das das try except bez die Prüfung des Wertebereichs ab.
+        try:
+            x = serBMS.readline()
+            y = x.split()           
         except:
-            myPrint("GetAndSendBmsData: mqtt konnte nicht gesendet werden")
+            myPrint("BMS read error. Init Serial again!")
+            try:
+                serBMS.close()  
+                serBMS.open()  
+            except:
+                myPrint("BMS reInit Serial failed!")          
+        for i in y:
+    #        if i == b'Strom':
+    #            try:
+    #                if checkWerteSprung(float(y[3]), BmsWerte["AkkuStrom"], 20, -1000, 1000):
+    #                    sendeMqtt = True
+    #                    BmsWerte["AkkuStrom"] = float(y[3])
+    #                    BattCurrent = BmsWerte["AkkuStrom"]
+    #            except:
+    #                myPrint("convertError")
+    #            break
+            if i == b'Kleinste':
+                try:   
+                    if checkWerteSprung(float(y[2]), BmsWerte["Vmin"], 1, -1, 10):
+                        sendeMqtt = True
+                        BmsWerte["Vmin"] = float(y[2])
+                except:
+                    myPrint("convertError")
+                break
+            if i == b'Groeste':
+                try:
+                    if checkWerteSprung(float(y[2]), BmsWerte["Vmax"], 1, -1, 10):
+                        sendeMqtt = True
+                        BmsWerte["Vmax"] = float(y[2])
+                except:
+                    myPrint("convertError")
+                break
+            if i == b'SOC':
+                try:
+                    if checkWerteSprung(float(y[1]), BmsWerte["AkkuAh"], 5, -2000, 2000): 
+                        sendeMqtt = True
+                        BmsWerte["AkkuAh"] = float(y[1])
+                except:
+                    myPrint("convertError")
+            #if i == b'SOC':
+            #    try:
+            #        if BmsWerte["AkkuProz"] == InitAkkuProz:
+            #            if checkWerteSprung(float(y[3]), BmsWerte["AkkuProz"], 1, -101, 101): 
+            #                sendeMqtt = True
+            #                BmsWerte["AkkuProz"] = float(y[3])
+            #        else:
+            #            if checkWerteSprung(float(y[3]), BmsWerte["AkkuProz"], 1, -101, 101) and checkWerteSprungMaxJump(float(y[3]), BmsWerte["AkkuProz"], 10): 
+            #                sendeMqtt = True
+            #                BmsWerte["AkkuProz"] = float(y[3])
+            #    except:
+            #        myPrint("convertError")
+            #    break
+            if i == b'Ladephase:':
+                lastLine = True
+                try:
+                    if BmsWerte["Ladephase"] != y[1].decode():
+                        sendeMqtt = True
+                    BmsWerte["Ladephase"] = y[1].decode()
+                except:
+                    myPrint("convertError")
+                break 
         
-    myPrint(x)
+        if x == b'Rel fahren 1\r\n':
+            if BmsWerte["BmsEntladeFreigabe"] == False:
+                BmsWerte["BmsEntladeFreigabe"] = True
+                sendeMqtt = True
+        elif x == b'Rel fahren 0\r\n':
+            if BmsWerte["BmsEntladeFreigabe"] == True:
+                BmsWerte["BmsEntladeFreigabe"] = False
+                sendeMqtt = True
+                
+        if sendeMqtt == True: 
+            sendeMqtt = False
+            try: 
+                client.publish("PV/BMS/istwerte", json.dumps(BmsWerte))
+                myPrint(BmsWerte)
+            except:
+                myPrint("GetAndSendBmsData: mqtt konnte nicht gesendet werden")
+            
+        myPrint(x)
 
-    return lastLine
 
 def autoInitInverter():
     global SkriptWerte
@@ -796,12 +823,14 @@ for name in list(EffektaData.keys()):
 time.sleep(1)
 
 # Soc Monitor Funktion in einem Thread starten
-t = Thread(target=GetSocData)
-t.start()
+if len(SocMonitorSerial):
+    t = Thread(target=GetSocData)
+    t.start()
 
-
-serBMS = serial.Serial(BmsSerial, 9600)  # open serial port
-
+# BMS Funktion in einem Thread starten
+if len(BmsSerial):
+    t = Thread(target=GetAndSendBmsData)
+    t.start()
 
 #serBMS.write(b'vsoc 3300')
 #serBMS.write(b'vsoc 3530')
@@ -837,20 +866,9 @@ myPrint("starte main loop")
 
 wetterdaten = {}
 
-while 1:
-    
-    try:
-        GetAndSendBmsData()
-    except:
-        myPrint("BMS read error. Init Serial again!")
-        try:
-            serBMS.close()  
-            serBMS.open()  
-        except:
-            myPrint("BMS reInit Serial failed!")       
-            
+while 1:     
+
     setInverterMode(wetterdaten)
-    
     wetterdaten = handleWeather(wetterdaten)
     
 
