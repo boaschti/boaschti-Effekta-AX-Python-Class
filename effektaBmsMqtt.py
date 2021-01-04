@@ -629,6 +629,7 @@ def setInverterMode(wetterDaten):
             elif SkriptWerte["WrNetzladen"] == False and SkriptWerte["Akkuschutz"] == True and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetzLadenein"]:
                 schalteAlleWrNetzLadenEin()
                 myPrint("Info: Schalte Netz mit laden")
+        EntladeFreigabeGesendet = False
     elif EntladeFreigabeGesendet == False:
         EntladeFreigabeGesendet = True
         schalteAlleWrAufNetzMitNetzladen()
