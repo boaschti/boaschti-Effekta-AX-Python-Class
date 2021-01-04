@@ -15,37 +15,39 @@ from Secret import getPassBMS
  
  
 #Globals
- 
+
+# Serielle Schnittstellen der Wechselrichter Soc Monitore und BMS
+EffektaData = {"WR1" : {"Serial" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9A5YBUE-if00-port0'}, "WR2" : {"Serial" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9HSILDS-if00-port0'}}
+BmsSerial = '/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0'
+SocMonitorSerial = "/dev/serial/by-path/platform-20980000.usb-usb-0:1.3.4:1.0-port0"
+
+#Akku Parameter die mit diesem Skript verstellt werden
+BattLeer = "PSDV43.0"
+BattWiederEntladen = "PBDV48.0"
+NetzSchnellLadestrom = "MUCHGC030"
+NetzErhaltungsLadestrom = "MUCHGC002"
+
+
+# Skript Start. Wenn autoInit dann wird StarteMitAkku ignoriert. 
+# Autoinit holt sich die letzten Daten vom mqtt Server. Wenn nicht verfügbar wird per SOC entschieden.
+# StarteMitAkku = True und AutoInitWrMode = False dann wird die Anlage mit Akkubetrieb gestartet/umgeschaltet
+StarteMitAkku = True
+AutoInitWrMode = True
+
+
+#Ausfuehrlich Skript Ausgabe zum debuggen
 beVerbose = False
 beVerboseEffekta = False
 #beVerbose = True
 #beVerboseEffekta = True
 
-# Skript Start. Wenn autoInit dann wird StarteMitAkku ignoriert
-StarteMitAkku = True
-AutoInitWrMode = True
 
 
-#EffektaSerialNames = {"WR1" : '/dev/ttyUSB1'}
-#EffektaSerialNames = {"WR1" : '/dev/ttyUSB1', "WR2" : '/dev/ttyUSB3'}
 
-# usb-FTDI_FT232R_USB_UART_A9A5YBUE-if00-port0  usb-FTDI_USB_Serial_Converter_FT8X1284-if00-port0  usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0
-
-EffektaData = {"WR1" : {"Serial" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9A5YBUE-if00-port0'}, "WR2" : {"Serial" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9HSILDS-if00-port0'}}
-
-#EffektaSerialNames = {"WR1" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9A5YBUE-if00-port0', "WR2" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9HSILDS-if00-port0'}
-
-#BmsSerial = '/dev/ttyUSB0'
-BmsSerial = '/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0'
-SocMonitorSerial = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
-
-
-VerbraucherPVundNetz = "POP01"  # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
+# Interne Konstanten
 VerbraucherNetz = "POP00"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
+VerbraucherPVundNetz = "POP01"  # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
 VerbraucherAkku = "POP02"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
-BattLeer = "PSDV43.0"
-BattWiederEntladen = "PBDV48.0"
-
 InitAkkuProz = -1
 BmsWerte = {"Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "Ladephase": "none", "BmsEntladeFreigabe":True}
 SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":"", "SkriptMode":"Auto"}
@@ -129,7 +131,7 @@ def on_message(client, userdata, msg):
         if str(msg.payload.decode()) == "NetzSchnellLadenEin":
             schalteAlleWrNetzSchnellLadenEin()
         if str(msg.payload.decode()) == "socResetMaxAndHold":
-            SocMonitorWerte["Commands"] = str(msg.payload.decode())
+            SocMonitorWerte["Commands"].append(str(msg.payload.decode()))
         if str(msg.payload.decode()) == "Auto" or str(msg.payload.decode()) == "Manual":
             SkriptWerte["SkriptMode"] = str(msg.payload.decode())
             sendeSkriptDaten()
@@ -217,7 +219,7 @@ def schalteAlleWrNetzLadenEin():
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
-        EffektaData[i]["EffektaCmd"].append("MUCHGC002")   # Netz Ladestrom  
+        EffektaData[i]["EffektaCmd"].append(NetzErhaltungsLadestrom)   # Netz Ladestrom  
         
     SkriptWerte["WrNetzladen"] = True
     sendeSkriptDaten()
@@ -231,7 +233,7 @@ def schalteAlleWrNetzSchnellLadenEin():
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
         EffektaData[i]["EffektaCmd"].append(VerbraucherNetz)       # load prio 00=Netz, 02=Batt
-        EffektaData[i]["EffektaCmd"].append("MUCHGC030")   # Netz Ladestrom 
+        EffektaData[i]["EffektaCmd"].append(NetzSchnellLadestrom)   # Netz Ladestrom 
         
     SkriptWerte["WrNetzladen"] = True
     SkriptWerte["SkriptMode"] = "Manual"
@@ -281,9 +283,9 @@ def schalteAlleWrAufNetzMitNetzladen():
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append(VerbraucherNetz)       # load prio 00=Netz, 02=Batt
-        EffektaData[i]["EffektaCmd"].append("PBDV52.0")   # redischarge voltage
-        EffektaData[i]["EffektaCmd"].append("PSDV48.0")    # Batt undervoltage
-        EffektaData[i]["EffektaCmd"].append("MUCHGC002")   # Netz Ladestrom
+        EffektaData[i]["EffektaCmd"].append("PBDV52.0")   # redischarge voltage auf Grösste Spannugn setzen
+        EffektaData[i]["EffektaCmd"].append("PSDV48.0")    # Batt undervoltage auf Grösste Spannugn setzen
+        EffektaData[i]["EffektaCmd"].append(NetzErhaltungsLadestrom)   # Netz Ladestrom
         EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv
         #EffektaData[i]["EffektaCmd"].append("PEj")       # PowerSaving enable PEJJJ
         
