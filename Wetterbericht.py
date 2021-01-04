@@ -141,11 +141,11 @@ def getSonnenStunden():
                         wetterDaten["Tag_4"] = {}
                         wetterDaten["Tag_4"]["Sonnenstunden"] = int(tempSun[0])
                         wetterDaten["Tag_4"]["Datum"] = tempDate[1]      
-                elif extMonth == now.month + 1:
+                elif extMonth == now.month + 1 or (now.month == 12 and extMonth == 1):
                         tag = tag + 1
                         wetterDaten["Tag_%i"%tag] = {}
                         wetterDaten["Tag_%i"%tag]["Sonnenstunden"] = int(tempSun[0])
-                        wetterDaten["Tag_%i"%tag]["Datum"] = tempDate[1]    
+                        wetterDaten["Tag_%i"%tag]["Datum"] = tempDate[1]                             
                 myPrint("Datum: %s" %datum)
                 myPrint("Sonne: %s" %sonnenStunden)
                 myPrint("******")

@@ -564,7 +564,7 @@ def setInverterMode(wetterDaten):
             # In der Sommerzeit löst now.hour = 17 um 18 Uhr aus, In der Winterzeit dann um 17 Uhr
             elif now.hour >= 12 and now.hour < 23:
             #if Zeit >= 17 and Zeit < 23:
-                if "Tag_0" in wetterDaten:
+                if "Tag_0" in wetterDaten and "Tag_1" in wetterDaten:
                     if wetterDaten["Tag_0"] != None and wetterDaten["Tag_1"] != None:
                         if wetterDaten["Tag_0"]["Sonnenstunden"] <= SkriptWerte["wetterSchaltschwelleNetz"] and wetterDaten["Tag_1"]["Sonnenstunden"] <= SkriptWerte["wetterSchaltschwelleNetz"]:
                         # Wir wollen den Akku schonen weil es nichts bringt wenn wir ihn leer machen
