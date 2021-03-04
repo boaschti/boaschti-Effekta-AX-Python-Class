@@ -306,6 +306,7 @@ SocMonitorWerte = {"Commands":[], "Ah":-1, "Currentaktuell":0, "Current":0, "Pro
 
 def GetSocData():
     global SocMonitorWerte
+    global EffektaData
     # b'Current A -1.92\r\n'
     # b'SOC Ah 258\r\n'
     # b'SOC <upper Bytes!!!> mAsec 931208825\r\n'
@@ -313,8 +314,7 @@ def GetSocData():
     
     # supported commands: "config, socResetMax, socResetMin, socResetMaxAndHold, releaseMaxSocHold"
     
-    serialSocMonitor = serial.Serial(SocMonitorSerial, 115200, timeout=2)
-
+    serialSocMonitor = serial.Serial(SocMonitorSerial, 115200)
     
     sendeMqtt = False
     resetSocSended = False
@@ -334,38 +334,43 @@ def GetSocData():
             SocMonitorWerte["Commands"].append("socResetMaxAndHold")
             # Wir schalten die Anlage auch wieder auf Automatisch
             SkriptWerte["SkriptMode"] = "Auto"
+            sendeSkriptDaten()
             myPrint("Info: Akku voll. Anlage wird auf Auto gestellt.")
             
         if SocMonitorWerte["FloatingMode"] == False and resetSocSended == True:
             resetSocSended = False
-            
+
+        
         try:
             x = serialSocMonitor.readline()
         except:
             myPrint("Error: SocMonitor Serial error. Init Serial again!")
             try:
-                myPrint("Info: SocMonitor Serial reInit!")
-                serBMS.close()  
-                serBMS.open()  
+                myPrint("Error: SocMonitor Serial reInit!")
+                serialSocMonitor.close()  
+                serialSocMonitor.open()  
             except:
-                myPrint("Error: SocMonitor reInit Serial failed!")        
+                myPrint("Error: SocMonitor reInit Serial failed!")  
         try:
             y = x.split()
             for i in y:
                 if i == b'Current' and y[1] == b'A':
-                    if checkWerteSprung(float(y[2]), SocMonitorWerte["Current"], 20, -200, 200):
+                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Current"], 20, -200, 200):
                         sendeMqtt = True  
-                    SocMonitorWerte["Current"] = float(y[2])
+                        SocMonitorWerte["Current"] = float(y[2].decode())
+                    SocMonitorWerte["Currentaktuell"] = float(y[2].decode())
                 elif i == b'Prozent':
-                    if checkWerteSprung(int(y[2]), SocMonitorWerte["Prozent"], 1, -1, 101):
+                    if checkWerteSprung(int(y[2].decode()), SocMonitorWerte["Prozent"], 1, -1, 101):
                         sendeMqtt = True                  
-                    SocMonitorWerte["Prozent"] = int(y[2])       
+                    SocMonitorWerte["Prozent"] = int(y[2].decode())  
+                    # Todo folgende Zeile entfernen und serial vernünftig lösen (zu langsam)
+                    serialSocMonitor.reset_input_buffer()
                 elif i == b'Ah':
-                    if checkWerteSprung(float(y[2]), SocMonitorWerte["Ah"], 1, -1, 500):
+                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Ah"], 1, -1, 500):
                         sendeMqtt = True                        
-                    SocMonitorWerte["Ah"] = float(y[2])       
+                        SocMonitorWerte["Ah"] = float(y[2].decode())  
         except:
-            myPrint("Info: SocMonitor Convert Data failed!")
+            myPrint("Error: SocMonitor Convert Data failed!")
 
         if sendeMqtt == True: 
             sendeMqtt = False
@@ -461,6 +466,8 @@ def GetAndSendBmsData():
             #    break
             if i == b'Ladephase:':
                 lastLine = True
+                # Todo folgende Zeile entfernen und serial vernünfti lösen (zu langsam)
+                serBMS.reset_input_buffer()                
                 try:
                     if BmsWerte["Ladephase"] != y[1].decode():
                         sendeMqtt = True
@@ -725,11 +732,11 @@ def GetAndSendEffektaData(name, serial, beVerbose):
         if len(EffekaQPIGS) > 0:
             if timestampbattEnergyCycle + battEnergyCycle < time.time():
                 timestampbattEnergyCycle = time.time()
-                if SocMonitorWerte["Current"] > 0:
-                    tempDailyCharge = tempDailyCharge  + ((float(BattVoltage) * SocMonitorWerte["Current"]) * battEnergyCycle / 60 / 60 / 1000)
+                if SocMonitorWerte["Currentaktuell"] > 0:
+                    tempDailyCharge = tempDailyCharge  + ((float(BattVoltage) * SocMonitorWerte["Currentaktuell"]) * battEnergyCycle / 60 / 60 / 1000)
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["DailyCharge"] = round(tempDailyCharge, 2)         
-                elif SocMonitorWerte["Current"] < 0:
-                    tempDailyDischarge = tempDailyDischarge  + ((float(BattVoltage) * abs(SocMonitorWerte["Current"])) * battEnergyCycle / 60 / 60 / 1000)
+                elif SocMonitorWerte["Currentaktuell"] < 0:
+                    tempDailyDischarge = tempDailyDischarge  + ((float(BattVoltage) * abs(SocMonitorWerte["Currentaktuell"])) * battEnergyCycle / 60 / 60 / 1000)
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["DailyDischarge"] = round(tempDailyDischarge, 2)     
 
         
