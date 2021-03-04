@@ -678,7 +678,7 @@ def GetAndSendEffektaData(name, serial, beVerbose):
     
     WR = EffektaConn(name, serial, beVerbose)
     EffektaData[WR.EffektaName()]["query"] = {"cmd":"", "response":"", "getValue": False}
-    EffektaData[WR.EffektaName()]["EffektaWerte"] = {"timeStamp": 0, "Netzspannung": 0, "AcOutPowerW": 0, "PvPower": 0, "BattChargCurr": 0, "BattDischargCurr": 0, "ActualMode": "", "DailyProduction": 0.0, "CompleteProduction": 0, "DailyCharge": 0.0, "DailyDischarge": 0.0, "BattCapacity": 0, "DeviceStatus2": "", "BattVoltage": 0.0}
+    EffektaData[WR.EffektaName()]["EffektaWerte"] = {"timeStamp": 0, "Netzspannung": 0, "AcOutSpannung": 0, "AcOutPowerW": 0, "PvPower": 0, "BattChargCurr": 0, "BattDischargCurr": 0, "ActualMode": "", "DailyProduction": 0.0, "CompleteProduction": 0, "DailyCharge": 0.0, "DailyDischarge": 0.0, "BattCapacity": 0, "DeviceStatus2": "", "BattVoltage": 0.0}
     
     effekta_Query_Cycle = 20
     writeErrors = 0
@@ -702,30 +702,34 @@ def GetAndSendEffektaData(name, serial, beVerbose):
             if len(EffekaQPIGS) > 0:
                 (Netzspannung, Netzfrequenz, AcOutSpannung, AcOutFrequenz, AcOutPowerVA, AcOutPowerW, AcOutLoadProz, BusVoltage, BattVoltage, BattChargCurr, BattCapacity, InverterTemp, PvCurrent, PvVoltage, BattVoltageSCC, BattDischargCurr, DeviceStatus1, BattOffset, EeVersion, PvPower, DeviceStatus2) = EffekaQPIGS.split()
 
-                sendeMqtt = sendeMqtt or (EffektaData[WR.EffektaName()]["EffektaWerte"]["DeviceStatus2"] != DeviceStatus2)
-                EffektaData[WR.EffektaName()]["EffektaWerte"]["DeviceStatus2"] = DeviceStatus2
+                EffektaData[WR.EffektaName()]["EffektaWerte"]["AcOutSpannung"] = float(AcOutSpannung)
                 
-                sendeMqtt = sendeMqtt or (checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattVoltage"], float(BattVoltage), 0.5, -1, 100))
-                EffektaData[WR.EffektaName()]["EffektaWerte"]["BattVoltage"] = float(BattVoltage)
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["Netzspannung"], int(float(Netzspannung)), 3, -1, 10000):
+                    EffektaData[WR.EffektaName()]["EffektaWerte"]["Netzspannung"] = int(float(Netzspannung))
+                    sendeMqtt = True                
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["AcOutPowerW"], int(AcOutPowerW), 10, -1, 10000):
+                    EffektaData[WR.EffektaName()]["EffektaWerte"]["AcOutPowerW"] = int(AcOutPowerW)
+                    sendeMqtt = True
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["PvPower"], int(PvPower), 10, -1, 10000):
+                    EffektaData[WR.EffektaName()]["EffektaWerte"]["PvPower"] = int(PvPower)
+                    sendeMqtt = True
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattChargCurr"], int(BattChargCurr), 10, -1, 10000):
+                    EffektaData[WR.EffektaName()]["EffektaWerte"]["BattChargCurr"] = int(BattChargCurr)
+                    sendeMqtt = True
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattDischargCurr"], int(BattDischargCurr), 10, -1, 10000):
+                    EffektaData[WR.EffektaName()]["EffektaWerte"]["BattDischargCurr"] = int(BattDischargCurr)
+                    sendeMqtt = True
+                if EffektaData[WR.EffektaName()]["EffektaWerte"]["DeviceStatus2"] != DeviceStatus2:
+                    EffektaData[WR.EffektaName()]["EffektaWerte"]["DeviceStatus2"] = DeviceStatus2
+                    sendeMqtt = True
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattVoltage"], float(BattVoltage), 0.5, -1, 100):
+                    EffektaData[WR.EffektaName()]["EffektaWerte"]["BattVoltage"] = float(BattVoltage)
+                    sendeMqtt = True
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattCapacity"], int(BattCapacity), 1, -1, 101):
+                    EffektaData[WR.EffektaName()]["EffektaWerte"]["BattCapacity"] = int(BattCapacity)
+                    sendeMqtt = True
                     
-                sendeMqtt = sendeMqtt or (checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattCapacity"], int(BattCapacity), 1, -1, 101))
-                EffektaData[WR.EffektaName()]["EffektaWerte"]["BattCapacity"] = int(BattCapacity)
                     
-                sendeMqtt = sendeMqtt or (checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["Netzspannung"], int(float(Netzspannung)), 3, -1, 10000))
-                EffektaData[WR.EffektaName()]["EffektaWerte"]["Netzspannung"] = int(float(Netzspannung))
-                    
-                sendeMqtt = sendeMqtt or (checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["AcOutPowerW"], int(AcOutPowerW), 10, -1, 10000))
-                EffektaData[WR.EffektaName()]["EffektaWerte"]["AcOutPowerW"] = int(AcOutPowerW)
-                    
-                sendeMqtt = sendeMqtt or (checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["PvPower"], int(PvPower), 10, -1, 10000))
-                EffektaData[WR.EffektaName()]["EffektaWerte"]["PvPower"] = int(PvPower)
-                    
-                sendeMqtt = sendeMqtt or (checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattChargCurr"], int(BattChargCurr), 10, -1, 10000))
-                EffektaData[WR.EffektaName()]["EffektaWerte"]["BattChargCurr"] = int(BattChargCurr)
-                    
-                sendeMqtt = sendeMqtt or (checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattDischargCurr"], int(BattDischargCurr), 10, -1, 10000))
-                EffektaData[WR.EffektaName()]["EffektaWerte"]["BattDischargCurr"] = int(BattDischargCurr)
-                
             tempDailyProduction = tempDailyProduction + (int(PvPower) * effekta_Query_Cycle / 60 / 60 / 1000)
             EffektaData[WR.EffektaName()]["EffektaWerte"]["DailyProduction"] = round(tempDailyProduction, 2)
             
