@@ -44,13 +44,13 @@ beVerboseEffekta = False
 
 
 
-# Interne Konstanten
+# Interne Konstanten und Variablen
 VerbraucherNetz = "POP00"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
 VerbraucherPVundNetz = "POP01"  # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
 VerbraucherAkku = "POP02"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
 InitAkkuProz = -1
 BmsWerte = {"Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "Ladephase": "none", "BmsEntladeFreigabe":True}
-SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":"", "SkriptMode":"Auto"}
+SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":"", "SkriptMode":"Auto", "PowerSaveMode":False}
 
 client = mqtt.Client() 
 
@@ -60,11 +60,12 @@ def myPrint(msg):
     temp = msg.split()
     if "Info:" in temp or "Error:" in temp or "Autoinit:" in temp:
         try:
-            client.publish("PV/Skript/Info", msg)
+            client.publish("PV/Skript/AllMsg", msg)
+            client.publish("PV/Skript/%s"%temp[0].replace(":",""), msg)
         except:
             if beVerbose:
                 print("myPrint: mqtt konnte nicht gesendet werden")
-        
+                
 def sendeSkriptDaten():
     global SkriptWerte
         
@@ -156,7 +157,7 @@ def checkWerteSprung(newValue, oldValue, percent, min, max):
     # Diese Funktion wird verwendet um kleine Wertsprünge rauszu Filtern und Werte Grenzen einzuhalten
 
     if newValue == oldValue == 0:
-        myPrint("wert wird nicht uebernommen")
+        #myPrint("wert wird nicht uebernommen")
         return False
         
     percent = percent * 0.01
@@ -166,10 +167,10 @@ def checkWerteSprung(newValue, oldValue, percent, min, max):
     maxPercent = oldValue + valuePercent
     
     if min <= newValue <= max and not (minPercent < newValue < maxPercent):
-        myPrint("wert wird uebernommen")
+        #myPrint("wert wird uebernommen")
         return True
     else:
-        myPrint("wert wird nicht uebernommen")
+        #myPrint("wert wird nicht uebernommen")
         return False
        
 def checkWerteSprungMaxJump(newValue, oldValue, jump):
@@ -177,17 +178,17 @@ def checkWerteSprungMaxJump(newValue, oldValue, jump):
     # Diese Funktion wird verwendet um Ausreißer raus zu Filtern
     
     if newValue == oldValue == 0:
-        myPrint("wert wird nicht uebernommen")
+        #myPrint("wert wird nicht uebernommen")
         return False
     
     minValue = oldValue - jump
     maxValue = oldValue + jump
     
     if (minValue < newValue < maxValue):
-        myPrint("wert wird uebernommen")
+        #myPrint("wert wird uebernommen")
         return True
     else:
-        myPrint("wert wird nicht uebernommen")
+        #myPrint("wert wird nicht uebernommen")
         return False  
 
 client.on_connect = on_connect
@@ -246,6 +247,7 @@ def schalteAlleWrNetzSchnellLadenEin():
     SkriptWerte["SkriptMode"] = "Manual"
     SkriptWerte["WrMode"] = VerbraucherNetz
     sendeSkriptDaten()
+    myPrint("Info: Schnellladen vom Netz wurde aktiviert!")
     myPrint("Info: Die Anlage wurde auf manuell gestellt!")
     
 
@@ -300,7 +302,7 @@ def schalteAlleWrAufNetzMitNetzladen():
     SkriptWerte["WrNetzladen"] = True
     sendeSkriptDaten()
 
-SocMonitorWerte = {"Commands":[], "Ah":-1, "Current":0, "Prozent":InitAkkuProz, "FloatingMode": False}
+SocMonitorWerte = {"Commands":[], "Ah":-1, "Currentaktuell":0, "Current":0, "Prozent":InitAkkuProz, "FloatingMode": False}
 
 def GetSocData():
     global SocMonitorWerte
@@ -376,13 +378,12 @@ def GetSocData():
                 # publish alle SOC Daten
                 client.publish("PV/SocMonitor/istwerte", json.dumps(SocMonitorWerte))
             except:
-                myPrint("Error: SocMonitor mqtt konnte nicht gesendet werden")
-        
+                myPrint("SocMonitor mqtt konnte nicht gesendet werden")
+
         if len(SocMonitorWerte["Commands"]):
             tempcmd = SocMonitorWerte["Commands"][0]
             cmd = tempcmd.encode('utf-8')
             cmd = cmd + b'\n'
-            myPrint("send command")
             try:
                 if serialSocMonitor.write(cmd):
                     del SocMonitorWerte["Commands"][0]
@@ -390,7 +391,7 @@ def GetSocData():
                 myPrint("Error: SocMonitor Commands konnten nicht gesendet werden. Command wird verworfen.")
                 del SocMonitorWerte["Commands"][0]
                 
-        myPrint(x)
+        #myPrint(x)
 
 def GetAndSendBmsData():
     global BmsWerte
@@ -485,7 +486,7 @@ def GetAndSendBmsData():
             except:
                 myPrint("GetAndSendBmsData: mqtt konnte nicht gesendet werden")
             
-        myPrint(x)
+        #myPrint(x)
 
 
 def autoInitInverter():
@@ -580,7 +581,7 @@ def setInverterMode(wetterDaten):
                                     schalteAlleWrAufNetzOhneNetzLaden()
                                     myPrint("Info: Sonne morgen < %ih -> schalte auf Netz." %SkriptWerte["wetterSchaltschwelleNetz"])
                     else:
-                        myPrint("Info: Keine Wetterdaten!")
+                        myPrint("Error: Keine Wetterdaten!")
             # In der Sommerzeit löst now.hour = 17 um 18 Uhr aus, In der Winterzeit dann um 17 Uhr
             elif now.hour >= 12 and now.hour < 23:
             #if Zeit >= 17 and Zeit < 23:
@@ -595,7 +596,7 @@ def setInverterMode(wetterDaten):
                                     schalteAlleWrAufNetzOhneNetzLaden()
                                     myPrint("Info: Sonne heute und morgen < %ih -> schalte auf Netz." %SkriptWerte["wetterSchaltschwelleNetz"])
                     else:
-                        myPrint("Info: Keine Wetterdaten!")
+                        myPrint("Error: Keine Wetterdaten!")
 
             #if now.hour >= 8 and now.hour < 17:
             #elif Zeit >= 8:
@@ -606,15 +607,16 @@ def setInverterMode(wetterDaten):
             # Wenn der Akku wieder über die schaltschwelleAkku ist dann wird er wieder Tag und Nacht genutzt
             if not SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleAkku"]:
                 SkriptWerte["Akkuschutz"] = False
+                passeSchaltschwellenAn()
                 schalteAlleWrAufAkku()
-                myPrint("Info: Schalte alle WR auf Akku")
+                myPrint("Info: Schalte auf Akku")
             # Wenn der Akku über die schaltschwellePvNetz ist dann geben wir den Akku wieder frei wenn PV verfügbar ist. PV (Tag), Netz (Nacht)
             elif SkriptWerte["WrMode"] == VerbraucherNetz and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwellePvNetz"]:
                 # Hier wird explizit nur geschalten wenn der WR auf VerbraucherNetz steht damit der Zweig nur reagiert wenn der Akku leer war und voll wird 
                 schalteAlleWrNetzLadenAus()
                 NetzLadenAusGesperrt = False
                 schalteAlleWrVerbraucherPVundNetz()
-                myPrint("Info: Schalte alle WR Verbraucher PV und Netz")
+                myPrint("Info: Schalte auf PV und Netzbetrieb")
             # Ab hier beginnt der Teil der die Anlage auf  Netz schaltet sowie das Netzladen ein und aus schaltet
             # Wir schalten auf Netz wenn der min Soc unterschritten wird
             if SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] <= SkriptWerte["MinSoc"]:
@@ -624,7 +626,6 @@ def setInverterMode(wetterDaten):
             # Wenn das Netz Laden durch eine Unterspannungserkennung eingeschaltet wurde schalten wir es aus wenn der Akku wieder 10% hat
             elif SkriptWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
                 schalteAlleWrNetzLadenAus()
-                myPrint("Schalte alle WR Netz laden aus")
                 myPrint("Info: NetzLadenaus %iP erreicht -> schalte Laden aus." %SkriptWerte["schaltschwelleNetzLadenaus"])
             # Wenn die Verbraucher auf PV (Tag) und Netz (Nacht) geschaltet wurden und der Akku wieder unter die schaltschwelleNetz fällt dann wird auf Netz geschaltet
             elif SkriptWerte["WrMode"] == VerbraucherPVundNetz and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetz"]:
@@ -636,7 +637,7 @@ def setInverterMode(wetterDaten):
                 myPrint("Info: %iP erreicht -> schalte Akkuschutz ein." %SkriptWerte["schaltschwelleNetzLadenaus"])
             elif SkriptWerte["WrNetzladen"] == False and SkriptWerte["Akkuschutz"] == True and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetzLadenein"]:
                 schalteAlleWrNetzLadenEin()
-                myPrint("Info: Schalte Netz mit laden")
+                myPrint("Info: Schalte auf Netz mit laden")
         EntladeFreigabeGesendet = False
     elif EntladeFreigabeGesendet == False:
         EntladeFreigabeGesendet = True
@@ -742,6 +743,7 @@ def GetAndSendEffektaData(name, serial, beVerbose):
             tempDailyDischarge = 0.0
             EffektaData[WR.EffektaName()]["EffektaWerte"]["DailyCharge"] = 0.0
             tempDailyCharge = 0.0
+            sendeMqtt = True
             
         
         sendeQuery = False
@@ -816,7 +818,7 @@ def handleWeather(wetterdaten):
             #tempWetter = getSonnenStunden()
             #wetterdaten.update( (k,v) for k,v in tempWetter.items() if v is not None)
         except:
-            myPrint("Info: Wetter Daten konnten nicht geholt werden!")
+            myPrint("Error: Wetter Daten konnten nicht geholt werden!")
             
     # Wenn der Tag_1 dem aktuellen Tag entspricht dann müssen wir die Tage um eins verrutschen
     # wir fragen zurest ab ob der key vorhanden ist denn es kann sein dass das Dict leer ist.
