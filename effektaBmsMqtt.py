@@ -314,7 +314,7 @@ def GetSocData():
     
     # supported commands: "config, socResetMax, socResetMin, socResetMaxAndHold, releaseMaxSocHold"
     
-    serialSocMonitor = serial.Serial(SocMonitorSerial, 115200)
+    serialSocMonitor = serial.Serial(SocMonitorSerial, 115200, timeout=4)
     
     sendeMqtt = False
     resetSocSended = False
@@ -357,18 +357,18 @@ def GetSocData():
             y = x.split()
             for i in y:
                 if i == b'Current' and y[1] == b'A':
-                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Current"], 20, -200, 200):
+                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Current"], 20, -200, 200) or sendeMqtt:
                         sendeMqtt = True  
                         SocMonitorWerte["Current"] = float(y[2].decode())
                     SocMonitorWerte["Currentaktuell"] = float(y[2].decode())
                 elif i == b'Prozent':
-                    if checkWerteSprung(int(y[2].decode()), SocMonitorWerte["Prozent"], 1, -1, 101):
+                    if checkWerteSprung(int(y[2].decode()), SocMonitorWerte["Prozent"], 1, -1, 101) or sendeMqtt:
                         sendeMqtt = True                  
                     SocMonitorWerte["Prozent"] = int(y[2].decode())  
                     # Todo folgende Zeile entfernen und serial vernünftig lösen (zu langsam)
                     serialSocMonitor.reset_input_buffer()
                 elif i == b'Ah':
-                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Ah"], 1, -1, 500):
+                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Ah"], 1, -1, 500) or sendeMqtt:
                         sendeMqtt = True                        
                         SocMonitorWerte["Ah"] = float(y[2].decode())  
         except:
@@ -403,7 +403,7 @@ def GetSocData():
 def GetAndSendBmsData():
     global BmsWerte
     
-    serBMS = serial.Serial(BmsSerial, 9600)  # open serial port
+    serBMS = serial.Serial(BmsSerial, 9600, timeout=4)  # open serial port
     
     while 1:
         sendeMqtt = False
@@ -433,7 +433,7 @@ def GetAndSendBmsData():
     #            break
             if i == b'Kleinste':
                 try:   
-                    if checkWerteSprung(float(y[2]), BmsWerte["Vmin"], 1, -1, 10):
+                    if checkWerteSprung(float(y[2]), BmsWerte["Vmin"], 1, -1, 10) or sendeMqtt:
                         sendeMqtt = True
                         BmsWerte["Vmin"] = float(y[2])
                 except:
@@ -441,7 +441,7 @@ def GetAndSendBmsData():
                 break
             if i == b'Groeste':
                 try:
-                    if checkWerteSprung(float(y[2]), BmsWerte["Vmax"], 1, -1, 10):
+                    if checkWerteSprung(float(y[2]), BmsWerte["Vmax"], 1, -1, 10) or sendeMqtt:
                         sendeMqtt = True
                         BmsWerte["Vmax"] = float(y[2])
                 except:
@@ -706,25 +706,25 @@ def GetAndSendEffektaData(name, serial, beVerbose):
                 if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["Netzspannung"], int(float(Netzspannung)), 3, -1, 10000):
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["Netzspannung"] = int(float(Netzspannung))
                     sendeMqtt = True                
-                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["AcOutPowerW"], int(AcOutPowerW), 10, -1, 10000):
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["AcOutPowerW"], int(AcOutPowerW), 10, -1, 10000) or sendeMqtt:
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["AcOutPowerW"] = int(AcOutPowerW)
                     sendeMqtt = True
-                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["PvPower"], int(PvPower), 10, -1, 10000):
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["PvPower"], int(PvPower), 10, -1, 10000) or sendeMqtt:
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["PvPower"] = int(PvPower)
                     sendeMqtt = True
-                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattChargCurr"], int(BattChargCurr), 10, -1, 10000):
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattChargCurr"], int(BattChargCurr), 10, -1, 10000) or sendeMqtt:
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["BattChargCurr"] = int(BattChargCurr)
                     sendeMqtt = True
-                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattDischargCurr"], int(BattDischargCurr), 10, -1, 10000):
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattDischargCurr"], int(BattDischargCurr), 10, -1, 10000) or sendeMqtt:
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["BattDischargCurr"] = int(BattDischargCurr)
                     sendeMqtt = True
                 if EffektaData[WR.EffektaName()]["EffektaWerte"]["DeviceStatus2"] != DeviceStatus2:
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["DeviceStatus2"] = DeviceStatus2
                     sendeMqtt = True
-                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattVoltage"], float(BattVoltage), 0.5, -1, 100):
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattVoltage"], float(BattVoltage), 0.5, -1, 100) or sendeMqtt:
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["BattVoltage"] = float(BattVoltage)
                     sendeMqtt = True
-                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattCapacity"], int(BattCapacity), 1, -1, 101):
+                if checkWerteSprung(EffektaData[WR.EffektaName()]["EffektaWerte"]["BattCapacity"], int(BattCapacity), 1, -1, 101) or sendeMqtt:
                     EffektaData[WR.EffektaName()]["EffektaWerte"]["BattCapacity"] = int(BattCapacity)
                     sendeMqtt = True
                     
