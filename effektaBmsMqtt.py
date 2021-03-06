@@ -306,7 +306,7 @@ SocMonitorWerte = {"Commands":[], "Ah":-1, "Currentaktuell":0, "Current":0, "Pro
 
 def GetSocData():
     global SocMonitorWerte
-    global EffektaData
+
     # b'Current A -1.92\r\n'
     # b'SOC Ah 258\r\n'
     # b'SOC <upper Bytes!!!> mAsec 931208825\r\n'
@@ -351,6 +351,8 @@ def GetSocData():
                 serialSocMonitor.open()  
             except:
                 myPrint("Error: SocMonitor reInit Serial failed!")  
+                time.sleep(100)
+
         try:
             y = x.split()
             for i in y:
@@ -417,7 +419,8 @@ def GetAndSendBmsData():
                 serBMS.close()  
                 serBMS.open()  
             except:
-                myPrint("BMS reInit Serial failed!")          
+                myPrint("BMS reInit Serial failed!")
+            time.sleep(100)                
         for i in y:
     #        if i == b'Strom':
     #            try:
@@ -497,8 +500,6 @@ def GetAndSendBmsData():
 
 
 def autoInitInverter():
-    global SkriptWerte
-    global BmsWerte
 
     if 0 < SocMonitorWerte["Prozent"] < SkriptWerte["schaltschwelleNetzLadenaus"]:
         myPrint("Autoinit: Schalte auf Netz mit Laden")
@@ -546,7 +547,6 @@ def passeSchaltschwellenAn():
 
 def setInverterMode(wetterDaten):
     global SkriptWerte
-    global BmsWerte
     global AutoInitWrMode
     global EntladeFreigabeGesendet
     global NetzLadenAusGesperrt
@@ -671,8 +671,6 @@ def setInverterMode(wetterDaten):
 
 def GetAndSendEffektaData(name, serial, beVerbose):
 
-    
-    global SocMonitorWerte
     global EffektaData
     sendeMqtt = False
     
@@ -690,6 +688,7 @@ def GetAndSendEffektaData(name, serial, beVerbose):
     #print(WR.getEffektaData("QPIRI"))
     
     while(1):
+        time.sleep(0.5)
         if EffektaData[WR.EffektaName()]["EffektaWerte"]["timeStamp"] + effekta_Query_Cycle < time.time():
             EffektaData[WR.EffektaName()]["EffektaWerte"]["timeStamp"] = time.time()
             EffekaQPIGS = WR.getEffektaData("QPIGS") # Device general status parameters inquiry
@@ -924,8 +923,9 @@ myPrint("starte main loop")
 
 wetterdaten = {}
 
-while 1:     
-
+while 1:  
+   
+    time.sleep(1)
     setInverterMode(wetterdaten)
     wetterdaten = handleWeather(wetterdaten)
     
