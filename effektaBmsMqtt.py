@@ -20,6 +20,7 @@ from Secret import getPassBMS
 EffektaData = {"WR1" : {"Serial" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9A5YBUE-if00-port0'}, "WR2" : {"Serial" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9HSILDS-if00-port0'}}
 BmsSerial = '/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller-if00-port0'
 SocMonitorSerial = "/dev/serial/by-path/platform-20980000.usb-usb-0:1.3.4:1.0-port0"
+UsbRelSerial = "/dev/serial/by-path/platform-20980000.usb-usb-0:1.2:1.0-port0"
 
 #Akku Parameter die mit diesem Skript verstellt werden
 BattLeer = "PSDV43.0"
@@ -143,6 +144,12 @@ def on_message(client, userdata, msg):
         if str(msg.payload.decode()) == "Auto" or str(msg.payload.decode()) == "Manual":
             SkriptWerte["SkriptMode"] = str(msg.payload.decode())
             sendeSkriptDaten()
+        if str(msg.payload.decode()) == "PowerSaveEin":    
+            SkriptWerte["PowerSaveMode"] = True
+            sendeSkriptDaten()
+        if str(msg.payload.decode()) == "PowerSaveAus":    
+            SkriptWerte["PowerSaveMode"] = False 
+            sendeSkriptDaten()            
             
     # get CompleteProduction from MQTT
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "CompleteProduction":
@@ -302,6 +309,28 @@ def schalteAlleWrAufNetzMitNetzladen():
     SkriptWerte["WrNetzladen"] = True
     sendeSkriptDaten()
 
+def getGlobalEffektaData():
+    
+    globalEffektaData = {"FloatingModeOr" : False, "OutputVoltageHighOr" : False, "InputVoltageAnd" : True, "OutputVoltageHighAnd" : True, "OutputVoltageLowAnd" : True, "ErrorPresentOr" : False}
+    
+    for name in list(EffektaData.keys()):
+        floatmode = list(EffektaData[name]["EffektaWerte"]["DeviceStatus2"])
+        # prüfen ob schon Parameter abgefragt wurden
+        if len(floatmode) > 0:
+            if floatmode[0] == "1":
+                globalEffektaData["FloatingModeOr"] = True    
+            if float(EffektaData[name]["EffektaWerte"]["Netzspannung"]) < 210.0:
+                globalEffektaData["InputVoltageAnd"] = False    
+            if float(EffektaData[name]["EffektaWerte"]["AcOutSpannung"]) < 210.0:
+                globalEffektaData["OutputVoltageHighAnd"] = False 
+            if float(EffektaData[name]["EffektaWerte"]["AcOutSpannung"]) > 25.0:
+                globalEffektaData["OutputVoltageLowAnd"] = False
+                globalEffektaData["OutputVoltageHighOr"] = True
+            if EffektaData[name]["EffektaWerte"]["ActualMode"] == "F":
+                globalEffektaData["ErrorPresentOr"] = True
+                
+    return globalEffektaData
+
 SocMonitorWerte = {"Commands":[], "Ah":-1, "Currentaktuell":0, "Current":0, "Prozent":InitAkkuProz, "FloatingMode": False}
 
 def GetSocData():
@@ -321,13 +350,7 @@ def GetSocData():
     
     while 1:    
         
-        # Wir wollen prüfen ob der Akku laut Laderegler voll ist und der SOCMonitor auf voll gesetzt werden soll
-        SocMonitorWerte["FloatingMode"] = False
-        for name in list(EffektaData.keys()):
-            floatmode = list(EffektaData[name]["EffektaWerte"]["DeviceStatus2"])
-            if len(floatmode) > 0:
-                if floatmode[0] == "1":
-                    SocMonitorWerte["FloatingMode"] = True
+        SocMonitorWerte["FloatingMode"] = tempglobalEffektaData["FloatingModeOr"]
         
         if SocMonitorWerte["FloatingMode"] == True and resetSocSended == False:
             resetSocSended = True
@@ -498,6 +521,190 @@ def GetAndSendBmsData():
             
         #myPrint(x)
 
+
+def NetzUmschaltung():
+    
+    netzMode = "Netz"
+    pvMode = "Pv"
+    unknownMode = "unknownMode"
+    modeError = "error"
+    relWr1 = b"Relay4 "
+    relWr2 = b"Relay3 "
+    relPvAus = b"Relay2 "
+    relNetzAus = b"Relay1 "
+    ein = b"1"
+    aus = b"0"
+    comandEnd = b"\n"
+    
+    aktualMode = None
+    
+    
+    serUsbRel = serial.Serial(UsbRelSerial, 115200, timeout=4)  # open serial port
+    # kurz warten damit das zurücklesen nicht zu schnell geht
+    time.sleep(2)
+    
+    def warteAufAcOutHigh():
+        i = 0
+        while i < 100:
+            tmpglobalEffektaData = getGlobalEffektaData()
+            if tmpglobalEffektaData["OutputVoltageHighAnd"] == True:
+                return True
+            i += 1
+            time.sleep(1)
+        return False
+        
+    def schalteRelaisAufNetz():
+        myPrint("Info: Schalte Netzumschaltung auf Netz.")
+        try:
+            serUsbRel.write(relNetzAus + aus + comandEnd)
+            serUsbRel.write(relPvAus + ein + comandEnd)
+            # warten bis Parameter geschrieben sind
+            time.sleep(30)
+            serUsbRel.write(relWr1 + aus + comandEnd)
+            serUsbRel.write(relWr2 + aus + comandEnd)
+            # warten bis keine Spannung mehr am ausgang anliegt damit der Schütz nicht wieder kurz anzieht
+            time.sleep(500)
+            tmpglobalEffektaData = getGlobalEffektaData()
+            if tmpglobalEffektaData["OutputVoltageHighOr"] == True:
+                # Durch das setzten von Powersave schalten wir als nächstes wieder zurück auf PV. 
+                SkriptWerte["PowerSaveMode"] = False
+                sendeSkriptDaten()
+                myPrint("Error: Wechselrichter konnte nicht abgeschaltet werden. Er hat nach Wartezeit immer noch Spannung am Ausgang! Die Automatische Netzumschaltung wurde deaktiviert.")
+                # Wir setzen den Status bereits hier ohne Rücklesen damit das relPvAus nicht zurückgesetzt wird. (siehe zurücklesen der Relais Werte)
+                return netzMode
+            else:
+                serUsbRel.write(relPvAus + aus + comandEnd)
+                # kurz warten damit das zurücklesen nicht zu schnell geht
+                time.sleep(0.5)
+        except:
+            myPrint("Error: UsbRel send Serial failed 1!")  
+        return unknownMode
+
+    def schalteRelaisAufPv():
+        myPrint("Info: Schalte Netzumschaltung auf PV.")
+        # warten bis Parameter geschrieben sind
+        time.sleep(30)
+        try:
+            serUsbRel.write(relPvAus + ein + comandEnd)
+            serUsbRel.write(relNetzAus + aus + comandEnd)
+            serUsbRel.write(relWr1 + ein + comandEnd)
+            serUsbRel.write(relWr2 + ein + comandEnd)
+            if warteAufAcOutHigh():
+                time.sleep(20)
+                serUsbRel.write(relPvAus + aus + comandEnd) 
+            else:
+                myPrint("Error: Wartezeit zu lange. Keine Ausgangsspannung am WR erkannt.")
+                serUsbRel.write(relWr1 + aus + comandEnd)
+                serUsbRel.write(relWr2 + aus + comandEnd) 
+                # warten bis keine Spannung mehr am ausgang anliegt damit der Schütz nicht wieder kurz anzieht
+                time.sleep(500)
+                serUsbRel.write(relPvAus + aus + comandEnd)
+            # kurz warten damit das zurücklesen nicht zu schnell geht
+            time.sleep(0.5)
+        except:
+            myPrint("Error: UsbRel send Serial failed 2!") 
+        return unknownMode
+    
+    aufNetzSchaltenErlaubt = True
+    
+    while 1:
+        time.sleep(1)
+        
+        if SkriptWerte["PowerSaveMode"] == True:
+            now = datetime.datetime.now()
+            # Wir setzten den aktualMode au None damit neu gelesen wird. Das Relais kann so wieder auf den alten Wert gesetzt werden falls der USB ect getrennt wurde.
+            if now.second == 1:
+                aktualMode = None
+            # Nach der Winterzeit von 7 - 22 Uhr
+            if now.hour >= 6 and now.hour < 21:
+                dayTime = True
+            else:
+                dayTime = False
+                aufNetzSchaltenErlaubt = True
+            # VerbraucherAkku -> schalten auf PV, VerbraucherNetz -> schalten auf Netz, VerbraucherPVundNetz -> zwischen 6-22 Uhr auf PV sonst Netz 
+            if (SkriptWerte["WrMode"] == VerbraucherAkku or (dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == netzMode:
+                aktualMode = schalteRelaisAufPv()
+                # Wir wollen nur einmal am Tag umschalten damit nicht zu oft geschaltet wird.
+                aufNetzSchaltenErlaubt = False
+            elif ((SkriptWerte["WrMode"] == VerbraucherNetz and aufNetzSchaltenErlaubt == True) or (not dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == pvMode:
+                tmpglobalEffektaData = getGlobalEffektaData()
+                # prüfen ob alle WR vom Netz versorgt werden
+                if tmpglobalEffektaData["InputVoltageAnd"] == True:
+                    aktualMode = schalteRelaisAufNetz()
+                    time.sleep(2)
+        elif aktualMode == netzMode:
+            aktualMode = schalteRelaisAufPv()    
+                    
+        if aktualMode == unknownMode or aktualMode == None:
+            if aktualMode == None:
+                meldeStatus = False
+            else:
+                meldeStatus = True
+        
+            relays = {"Relay1": "unknown", "Relay2": "unknown", "Relay3": "unknown", "Relay4": "unknown"}
+            zeilen = []
+            try:
+                serUsbRel.reset_input_buffer()
+                serUsbRel.write(b"getIO\n")
+                # Die nächsten 8 Zeilen lesen
+                for i in range(8):
+                    zeilen.append("")
+                    zeilen[i] = serUsbRel.readline()
+            except:
+                myPrint("Error: UsbRel Serial error. Init Serial again!")
+                try:
+                    myPrint("Error: UsbRel Serial reInit.")
+                    serUsbRel.close()  
+                    serUsbRel.open() 
+                    time.sleep(10)
+                except:
+                    myPrint("Error: UsbRel reInit Serial failed!") 
+                    time.sleep(200)
+            try:
+                for i in zeilen:            
+                    y = i.split()  
+                    if i == b"RelayLock 1\r\n":
+                        serUsbRel.write(b"RelayLock 0\n")
+                        myPrint("Info: UsbRel Lock released.") 
+                    if len(y) > 0:
+                        if y[0].decode() in relays:
+                            relays[y[0].decode()] = y[1].decode()
+            except:
+                myPrint("Error: UsbRel convert Data failed!")
+            
+            if relays == {"Relay1": "0", "Relay2": "0", "Relay3": "0", "Relay4": "0"}:
+                aktualMode = netzMode
+            elif relays == {"Relay1": "0", "Relay2": "0", "Relay3": "1", "Relay4": "1"}:
+                aktualMode = pvMode
+            elif relays["Relay3"] == "1" and relays["Relay4"] == "1":
+                myPrint("Error: UsbRel Inconsistent State! Set relNetzAus and relPvAus to off and try again reading state")
+                try:
+                    serUsbRel.write(relNetzAus + aus + comandEnd)
+                    serUsbRel.write(relPvAus + aus + comandEnd)
+                    aktualMode = unknownMode
+                except:
+                    myPrint("Error: UsbRel send Serial failed 3!")                  
+            elif relays == {"Relay1": "unknown", "Relay2": "unknown", "Relay3": "unknown", "Relay4": "unknown"}:
+                aktualMode = unknownMode
+            else:
+                aktualMode = modeError
+
+            if meldeStatus == True:
+                myPrint("Info: Die Netz Umschaltung steht jetzt auf %s"%aktualMode)
+            
+            if aktualMode == modeError:
+                time.sleep(20)
+                aktualMode = unknownMode
+                myPrint("Error: UsbRel set all to off and try again reading state")
+                try:
+                    serUsbRel.write(relNetzAus + aus + comandEnd)
+                    serUsbRel.write(relPvAus + aus + comandEnd)
+                    serUsbRel.write(relWr1 + aus + comandEnd)
+                    serUsbRel.write(relWr2 + aus + comandEnd)
+                    time.sleep(0.5)
+                except:
+                    myPrint("Error: UsbRel send Serial failed 4!")           
+                
 
 def autoInitInverter():
 
@@ -878,6 +1085,10 @@ if len(SocMonitorSerial):
 # BMS Funktion in einem Thread starten
 if len(BmsSerial):
     t = Thread(target=GetAndSendBmsData)
+    t.start()
+    
+if len(UsbRelSerial):
+    t = Thread(target=NetzUmschaltung)
     t.start()
 
 #serBMS.write(b'vsoc 3300')
