@@ -351,13 +351,21 @@ def GetSocData():
     sendeMqtt = False
     resetSocSended = False
     
-    while 1:    
+    #SocMonitorWerte["Commands"].append("setSocToValue")
+    #SocMonitorWerte["Commands"].append("50")
+    
+    while 1:
+                    
+        tempglobalEffektaData = getGlobalEffektaData()
         
         SocMonitorWerte["FloatingMode"] = tempglobalEffektaData["FloatingModeOr"]
         
         if SocMonitorWerte["FloatingMode"] == True and resetSocSended == False:
             resetSocSended = True
             SocMonitorWerte["Commands"].append("socResetMaxAndHold")
+            # Wir schreiben gleich 100 in den Akkustand um einen fehlerhaften Schaltvorgang aufgrund des aktuellen Akkustandes zu verhindern
+            SocMonitorWerte["Prozent"] = 100 
+            serialSocMonitor.reset_input_buffer()
             # Wir schalten die Anlage auch wieder auf Automatisch
             SkriptWerte["SkriptMode"] = "Auto"
             sendeSkriptDaten()
@@ -848,7 +856,7 @@ def setInverterMode(wetterDaten):
             elif SkriptWerte["WrMode"] == VerbraucherPVundNetz and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetz"]:
                 schalteAlleWrAufNetzOhneNetzLaden()
                 myPrint("Info: Schalte auf Netz")
-            elif SkriptWerte["WrMode"] != VerbraucherAkku and SkriptWerte["WrNetzladen"] == False and SkriptWerte["Akkuschutz"] == False and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetzLadenaus"] and SocMonitorWerte["Prozent"] > 0.0:
+            elif SkriptWerte["WrMode"] != VerbraucherAkku and SkriptWerte["WrNetzladen"] == False and SkriptWerte["Akkuschutz"] == False and SocMonitorWerte["Prozent"] < SkriptWerte["schaltschwelleNetzLadenaus"] and SocMonitorWerte["Prozent"] != InitAkkuProz:
                 SkriptWerte["Akkuschutz"] = True
                 myPrint("Schalte Akkuschutz ein")
                 myPrint("Info: %iP erreicht -> schalte Akkuschutz ein." %SkriptWerte["schaltschwelleNetzLadenaus"])
