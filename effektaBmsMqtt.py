@@ -158,7 +158,7 @@ def on_message(client, userdata, msg):
         client.unsubscribe("PV/" + tempTopicList[1] + "/CompleteProduction")
     
         
-def checkWerteSprung(newValue, oldValue, percent, min, max):
+def checkWerteSprung(newValue, oldValue, percent, min, max, minAbs = 0):
     
     # Diese Funktion prüft, dass der neue Wert innerhalb der angegebenen min max Grenzen und ausserhalb der angegebenen Prozent Grenze
     # Diese Funktion wird verwendet um kleine Wertsprünge rauszu Filtern und Werte Grenzen einzuhalten
@@ -170,6 +170,9 @@ def checkWerteSprung(newValue, oldValue, percent, min, max):
     percent = percent * 0.01
     valuePercent = abs(oldValue) * percent
     
+    if valuePercent < minAbs:
+        valuePercent = minAbs
+        
     minPercent = oldValue - valuePercent
     maxPercent = oldValue + valuePercent
     
@@ -380,7 +383,7 @@ def GetSocData():
             y = x.split()
             for i in y:
                 if i == b'Current' and y[1] == b'A':
-                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Current"], 20, -200, 200) or sendeMqtt:
+                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Current"], 20, -200, 200, 5) or sendeMqtt:
                         sendeMqtt = True  
                         SocMonitorWerte["Current"] = float(y[2].decode())
                     SocMonitorWerte["Currentaktuell"] = float(y[2].decode())
@@ -391,7 +394,7 @@ def GetSocData():
                     # Todo folgende Zeile entfernen und serial vernünftig lösen (zu langsam)
                     serialSocMonitor.reset_input_buffer()
                 elif i == b'Ah':
-                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Ah"], 1, -1, 500) or sendeMqtt:
+                    if checkWerteSprung(float(y[2].decode()), SocMonitorWerte["Ah"], 1, -1, 500, 10) or sendeMqtt:
                         sendeMqtt = True                        
                         SocMonitorWerte["Ah"] = float(y[2].decode())  
         except:
