@@ -539,6 +539,7 @@ def NetzUmschaltung():
     pvMode = "Pv"
     unknownMode = "unknownMode"
     modeError = "error"
+    OutputVoltageError = "OutputVoltageError"
     relWr1 = b"Relay4 "
     relWr2 = b"Relay3 "
     relPvAus = b"Relay2 "
@@ -577,7 +578,8 @@ def NetzUmschaltung():
             time.sleep(500)
             tmpglobalEffektaData = getGlobalEffektaData()
             if tmpglobalEffektaData["OutputVoltageHighOr"] == True:
-                # Durch das setzten von Powersave schalten wir als nächstes wieder zurück auf PV. 
+                # Durch das ruecksetzten von PowersaveMode schalten wir als nächstes wieder zurück auf PV. 
+                # Wir wollen im Fehlerfall keinen inkonsistenten Schaltzustand der Anlage darum schalten wir die Umrichter nicht aus.
                 SkriptWerte["PowerSaveMode"] = False
                 sendeSkriptDaten()
                 myPrint("Error: Wechselrichter konnte nicht abgeschaltet werden. Er hat nach Wartezeit immer noch Spannung am Ausgang! Die Automatische Netzumschaltung wurde deaktiviert.")
@@ -605,11 +607,16 @@ def NetzUmschaltung():
                 serUsbRel.write(relPvAus + aus + comandEnd) 
             else:
                 myPrint("Error: Wartezeit zu lange. Keine Ausgangsspannung am WR erkannt.")
+                #Wir schalten die Funktion aus
+                SkriptWerte["PowerSaveMode"] = False
+                sendeSkriptDaten()
+                myPrint("Error: Die Automatische Netzumschaltung wurde deaktiviert.")
                 serUsbRel.write(relWr1 + aus + comandEnd)
                 serUsbRel.write(relWr2 + aus + comandEnd) 
                 # warten bis keine Spannung mehr am ausgang anliegt damit der Schütz nicht wieder kurz anzieht
                 time.sleep(500)
                 serUsbRel.write(relPvAus + aus + comandEnd)
+                return OutputVoltageError
             # kurz warten damit das zurücklesen nicht zu schnell geht
             time.sleep(0.5)
         except:
@@ -617,35 +624,44 @@ def NetzUmschaltung():
         return unknownMode
     
     aufNetzSchaltenErlaubt = True
-    
+    aufPvSchaltenErlaubt = True
+        
     while 1:
         time.sleep(1)
         
-        if SkriptWerte["PowerSaveMode"] == True:
-            now = datetime.datetime.now()
-            # Wir setzten den aktualMode au None damit neu gelesen wird. Das Relais kann so wieder auf den alten Wert gesetzt werden falls der USB ect getrennt wurde.
-            if now.second == 1:
-                aktualMode = None
-            # Nach der Winterzeit von 7 - 22 Uhr
-            if now.hour >= 6 and now.hour < 21:
-                dayTime = True
-            else:
-                dayTime = False
-                aufNetzSchaltenErlaubt = True
-            # VerbraucherAkku -> schalten auf PV, VerbraucherNetz -> schalten auf Netz, VerbraucherPVundNetz -> zwischen 6-22 Uhr auf PV sonst Netz 
-            if (SkriptWerte["WrMode"] == VerbraucherAkku or (dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == netzMode:
-                aktualMode = schalteRelaisAufPv()
-                # Wir wollen nur einmal am Tag umschalten damit nicht zu oft geschaltet wird.
-                aufNetzSchaltenErlaubt = False
-            elif ((SkriptWerte["WrMode"] == VerbraucherNetz and aufNetzSchaltenErlaubt == True) or (not dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == pvMode:
-                tmpglobalEffektaData = getGlobalEffektaData()
-                # prüfen ob alle WR vom Netz versorgt werden
-                if tmpglobalEffektaData["InputVoltageAnd"] == True:
-                    aktualMode = schalteRelaisAufNetz()
-                    time.sleep(2)
-        elif aktualMode == netzMode:
-            aktualMode = schalteRelaisAufPv()    
-                    
+        now = datetime.datetime.now()
+        # Wir setzten den aktualMode au None damit neu gelesen wird. Das Relais kann so wieder auf den alten Wert gesetzt werden falls der USB ect getrennt wurde.
+        if now.second == 1:
+            aktualMode = None
+        
+        tmpglobalEffektaData = getGlobalEffektaData()
+        if tmpglobalEffektaData["ErrorPresentOr"] == False:
+            if SkriptWerte["PowerSaveMode"] == True:
+                # Nach der Winterzeit von 7 - 22 Uhr
+                if now.hour >= 6 and now.hour < 21:
+                    dayTime = True
+                else:
+                    dayTime = False
+                    aufNetzSchaltenErlaubt = True
+                    aufPvSchaltenErlaubt = True
+                # VerbraucherAkku -> schalten auf PV, VerbraucherNetz -> schalten auf Netz, VerbraucherPVundNetz -> zwischen 6-22 Uhr auf PV sonst Netz 
+                if (SkriptWerte["WrMode"] == VerbraucherAkku or (dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == netzMode:
+                    aktualMode = schalteRelaisAufPv()
+                    # Wir wollen nur einmal am Tag umschalten damit nicht zu oft geschaltet wird.
+                    aufNetzSchaltenErlaubt = False
+                elif ((SkriptWerte["WrMode"] == VerbraucherNetz and aufNetzSchaltenErlaubt == True) or (not dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == pvMode:
+                    tmpglobalEffektaData = getGlobalEffektaData()
+                    # prüfen ob alle WR vom Netz versorgt werden
+                    if tmpglobalEffektaData["InputVoltageAnd"] == True:
+                        aktualMode = schalteRelaisAufNetz()
+                        time.sleep(2)
+            elif aktualMode == netzMode and aufPvSchaltenErlaubt == True:
+                aktualMode = schalteRelaisAufPv()    
+                if aktualMode == OutputVoltageError:
+                    aufPvSchaltenErlaubt = False
+        else aktualMode == pvMode:
+            aktualMode = schalteRelaisAufNetz()
+        
         if aktualMode == unknownMode or aktualMode == None:
             if aktualMode == None:
                 meldeStatus = False
@@ -715,6 +731,7 @@ def NetzUmschaltung():
                     time.sleep(0.5)
                 except:
                     myPrint("Error: UsbRel send Serial failed 4!")           
+       
                 
 
 def autoInitInverter():
