@@ -159,7 +159,10 @@ def on_message(client, userdata, msg):
             sendeSkriptDaten()
         if str(msg.payload.decode()) == "PowerSaveAus":    
             SkriptWerte["PowerSaveMode"] = False 
-            sendeSkriptDaten()            
+            sendeSkriptDaten()       
+        if str(msg.payload.decode()) in ["PDb", "PEb"]:
+            for i in list(EffektaData.keys()):
+                EffektaData[i]["EffektaCmd"].append(str(msg.payload.decode()))      
             
     # get CompleteProduction from MQTT
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "CompleteProduction":
