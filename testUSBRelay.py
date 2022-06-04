@@ -149,7 +149,6 @@ def NetzUmschaltung():
                     # Wir wollen nur einmal am Tag umschalten damit nicht zu oft geschaltet wird.
                     aufNetzSchaltenErlaubt = False
                 elif ((SkriptWerte["WrMode"] == VerbraucherNetz and aufNetzSchaltenErlaubt == True) or (not dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == pvMode:
-                    tmpglobalEffektaData = getGlobalEffektaData()
                     # prüfen ob alle WR vom Netz versorgt werden
                     if tmpglobalEffektaData["InputVoltageAnd"] == True:
                         aktualMode = schalteRelaisAufNetz()
@@ -158,7 +157,7 @@ def NetzUmschaltung():
                 aktualMode = schalteRelaisAufPv()    
                 if aktualMode == OutputVoltageError:
                     aufPvSchaltenErlaubt = False
-        else aktualMode == pvMode:
+        elif aktualMode == pvMode:
             aktualMode = schalteRelaisAufNetz()
         
         if aktualMode == unknownMode or aktualMode == None:

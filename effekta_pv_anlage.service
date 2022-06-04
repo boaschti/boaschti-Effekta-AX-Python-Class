@@ -1,0 +1,9 @@
+[Unit]
+Description=effekta_pv_anlage
+
+[Service]
+Type=simple
+ExecStart=python3 /home/pi/effektaBmsMqtt.py
+
+[Install]
+WantedBy=multi-user.target
