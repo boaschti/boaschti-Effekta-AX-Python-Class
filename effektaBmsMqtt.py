@@ -357,7 +357,7 @@ def GetSocData():
     # b'SOC <upper Bytes!!!> mAsec 931208825\r\n'
     # b'SOC Prozent 99\r\n'
     
-    # supported commands: "config, socResetMax, socResetMin, socResetMaxAndHold, releaseMaxSocHold"
+    # supported commands: "config, socResetMax, socResetMin, socResetMaxAndHold, releaseMaxSocHold, setSocToValue"
     
     serialSocMonitor = serial.Serial(SocMonitorSerial, 115200, timeout=4)
     
