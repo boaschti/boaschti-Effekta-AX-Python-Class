@@ -390,6 +390,13 @@ def GetSocData():
         
         try:
             x = serialSocMonitor.readline()
+        #timebeg = time.time()
+        #x = ""
+        #while 1:
+        #    serChar = serialSocMonitor.read()
+        #    x = x + serChar.decode()
+        #    if serChar == b"/n" or (time.time() > (timebeg + timeoutRead)):
+        #        break         
         except:
             myPrint("Error: SocMonitor Serial error. Init Serial again!")
             try:
@@ -669,7 +676,6 @@ def NetzUmschaltung():
                     # Wir wollen nur einmal am Tag umschalten damit nicht zu oft geschaltet wird.
                     aufNetzSchaltenErlaubt = False
                 elif ((SkriptWerte["WrMode"] == VerbraucherNetz and aufNetzSchaltenErlaubt == True) or (not dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == pvMode:
-                    tmpglobalEffektaData = getGlobalEffektaData()
                     # prüfen ob alle WR vom Netz versorgt werden
                     if tmpglobalEffektaData["InputVoltageAnd"] == True:
                         aktualMode = schalteRelaisAufNetz()
@@ -678,7 +684,7 @@ def NetzUmschaltung():
                 aktualMode = schalteRelaisAufPv()    
                 if aktualMode == OutputVoltageError:
                     aufPvSchaltenErlaubt = False
-        else aktualMode == pvMode:
+        elif aktualMode == pvMode:
             aktualMode = schalteRelaisAufNetz()
         
         if aktualMode == unknownMode or aktualMode == None:
