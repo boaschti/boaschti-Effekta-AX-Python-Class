@@ -410,8 +410,14 @@ def GetSocData():
                     SocMonitorWerte["Currentaktuell"] = float(y[2].decode())
                 elif i == b'Prozent':
                     if checkWerteSprung(int(y[2].decode()), SocMonitorWerte["Prozent"], 1, -1, 101) or sendeMqtt:
-                        sendeMqtt = True                  
-                    SocMonitorWerte["Prozent"] = int(y[2].decode())  
+                        sendeMqtt = True  
+                    # Wenn wir einen Akkustan haben und der SOC Monitor neu gestartet wurde dann schicken wir den Wert
+                    if SocMonitorWerte["Prozent"] != InitAkkuProz and int(y[2].decode()) == 0 and SocMonitorWerte["Prozent"] != int(y[2].decode()):
+                        SocMonitorWerte["Commands"].append("setSocToValue")
+                        SocMonitorWerte["Commands"].append(str(SocMonitorWerte["Prozent"]))
+                        myPrint("Error: SocMonitor hatte unerwartet den falschen Wert! Alt: %i, Neu: %i" %(int(y[2].decode()),SocMonitorWerte["Prozent"]))
+                    else:
+                        SocMonitorWerte["Prozent"] = int(y[2].decode())  
                     # Todo folgende Zeile entfernen und serial vernünftig lösen (zu langsam)
                     serialSocMonitor.reset_input_buffer()
                 elif i == b'Ah':
