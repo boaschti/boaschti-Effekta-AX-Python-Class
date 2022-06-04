@@ -10,11 +10,10 @@ from Wetterbericht import getSonnenStunden
 from Secret import getPassMqtt
 from Secret import getUserMqtt
 from Secret import getPassBMS
-
-#import Wetterbericht
  
  
-#Globals
+# Globals
+# Define a emty string if not used
 
 # Serielle Schnittstellen der Wechselrichter Soc Monitore und BMS
 EffektaData = {"WR1" : {"Serial" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9A5YBUE-if00-port0'}, "WR2" : {"Serial" : '/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A9HSILDS-if00-port0'}}
@@ -22,7 +21,10 @@ BmsSerial = '/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controlle
 SocMonitorSerial = "/dev/serial/by-path/platform-20980000.usb-usb-0:1.3.4:1.0-port0"
 UsbRelSerial = "/dev/serial/by-path/platform-20980000.usb-usb-0:1.2:1.0-port0"
 
-#Akku Parameter die mit diesem Skript verstellt werden
+# MqttBrokerIp
+MqttBrokerIp = "192.168.178.38"
+
+#Effekta Parameter die mit diesem Skript verstellt werden
 BattLeer = "PSDV43.0"
 BattWiederEntladen = "PBDV48.0"
 NetzSchnellLadestrom = "MUCHGC030"
@@ -76,11 +78,9 @@ def sendeSkriptDaten():
         myPrint("sendeSkriptDaten: mqtt konnte nicht gesendet werden")
 
 def mqttconnect():
-
     client.username_pw_set(getUserMqtt(),getPassMqtt())
-    client.connect( "192.168.178.38" , 1883 , 60 ) 
+    client.connect( MqttBrokerIp , 1883 , 60 ) 
     client.loop_start() 
-    client.subscribe("PV/BMS/command") 
     
 def mqttconnectWaitAndRetry():
     for i in range(10):
