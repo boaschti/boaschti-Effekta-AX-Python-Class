@@ -441,7 +441,7 @@ def GetSocData():
                 temp = {}
                 temp["AkkuStrom"] = SocMonitorWerte["Current"]
                 temp["AkkuProz"] = SocMonitorWerte["Prozent"]
-                client.publish("PV/SocMonitor/istwerte", json.dumps(temp))
+                client.publish("PV/PvAnzeige/istwerte", json.dumps(temp))
                 # publish alle SOC Daten
                 client.publish("PV/SocMonitor/istwerte", json.dumps(SocMonitorWerte))
             except:
