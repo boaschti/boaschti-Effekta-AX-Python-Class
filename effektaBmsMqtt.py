@@ -81,6 +81,15 @@ def mqttconnect():
     client.connect( "192.168.178.38" , 1883 , 60 ) 
     client.loop_start() 
     client.subscribe("PV/BMS/command") 
+    
+def mqttconnectWaitAndRetry():
+    for i in range(10):
+        try: 
+            mqttconnect()
+            return
+        except:
+            time.sleep(100)
+    return
 
 def on_connect(client, userdata, flags, rc):
     global EffektaData
@@ -91,7 +100,8 @@ def on_connect(client, userdata, flags, rc):
         client.subscribe("PV/" + name + "/request")
     
     client.subscribe("PV/allWr/command")
-
+    client.subscribe("PV/BMS/command")
+    
     myPrint("MQTT Connected with result code " + str(rc))
 
 def on_message(client, userdata, msg):
@@ -1092,8 +1102,14 @@ def handleWeather(wetterdaten):
     return wetterdaten
 
 
-
-mqttconnect()
+if len(MqttBrokerIp):
+    try:
+        mqttconnect()
+    except:
+        # MQtt Connect Funktion in einem Thread starten damit wir es zu einem späteren Zeitpunkt nocheinmal versuchen
+        # Das Skript nach dem Netzwerk starten per sysctrl rule ist nicht sinnvoll da das Skript auch ohne Netzwerk funktionieren soll
+        t = Thread(target=mqttconnectWaitAndRetry)
+        t.start()
 
 # Init Threads and globals for Effektas
 for name in list(EffektaData.keys()):
