@@ -679,6 +679,8 @@ def NetzUmschaltung():
                         aktualMode = schalteRelaisAufNetz()
                         time.sleep(2)
             elif aktualMode == netzMode and aufPvSchaltenErlaubt == True:
+                # Wir resetten die Variable hier auch damit man durch aus und einchalten von PowerSaveMode das Umschalten auf Netz wieder frei gibt.
+                aufNetzSchaltenErlaubt = True
                 aktualMode = schalteRelaisAufPv()    
                 if aktualMode == OutputVoltageError:
                     aufPvSchaltenErlaubt = False
