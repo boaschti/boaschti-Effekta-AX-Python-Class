@@ -380,10 +380,7 @@ def GetSocData():
             # Wir schreiben gleich 100 in den Akkustand um einen fehlerhaften Schaltvorgang aufgrund des aktuellen Akkustandes zu verhindern
             SocMonitorWerte["Prozent"] = 100 
             serialSocMonitor.reset_input_buffer()
-            # Wir schalten die Anlage auch wieder auf Automatisch
-            SkriptWerte["SkriptMode"] = "Auto"
-            sendeSkriptDaten()
-            myPrint("Info: Akku voll. Anlage wird auf Auto gestellt.")
+            myPrint("Info: Akku voll.")
             
         if SocMonitorWerte["FloatingMode"] == False and resetSocSended == True:
             resetSocSended = False
