@@ -133,8 +133,6 @@ def on_message(client, userdata, msg):
             schalteAlleWrAufAkku()
         if str(msg.payload.decode()) == "WrAufNetz":
             schalteAlleWrAufNetzOhneNetzLaden()
-        if str(msg.payload.decode()) == "WrVerbraucherPVundNetz":
-            schalteAlleWrVerbraucherPVundNetz();
         if str(msg.payload.decode()) == "AkkuschutzEin":
             SkriptWerte["Akkuschutz"] = True
             passeSchaltschwellenAn()
@@ -274,20 +272,6 @@ def schalteAlleWrNetzSchnellLadenEin():
     myPrint("Info: Schnellladen vom Netz wurde aktiviert!")
     myPrint("Info: Die Anlage wurde auf manuell gestellt!")
     
-
-def schalteAlleWrVerbraucherPVundNetz():
-    # Funktion noch nicht getestet
-    global EffektaData
-    global SkriptWerte
-    
-    for i in list(EffektaData.keys()):
-        EffektaData[i]["EffektaCmd"].append(BattLeer)    # Batt undervoltage
-        EffektaData[i]["EffektaCmd"].append(BattWiederEntladen)   # redischarge voltage
-        #EffektaData[i]["EffektaCmd"].append("PDj")       # PowerSaving disable PDJJJ
-        EffektaData[i]["EffektaCmd"].append(VerbraucherPVundNetz)       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
-        
-    SkriptWerte["WrMode"] = VerbraucherPVundNetz
-    sendeSkriptDaten()
 
 def schalteAlleWrAufNetzOhneNetzLaden():
     # Diese Funktion ist dazu da, um den Akku zu schonen wenn lange schlechtes wetter ist und zu wenig PV leistung kommt sodass die Verbraucher versorgt werden können
@@ -661,19 +645,17 @@ def NetzUmschaltung():
         tmpglobalEffektaData = getGlobalEffektaData()
         if tmpglobalEffektaData["ErrorPresentOr"] == False:
             if SkriptWerte["PowerSaveMode"] == True:
-                # Nach der Winterzeit von 7 - 22 Uhr
-                if now.hour >= 6 and now.hour < 21:
-                    dayTime = True
-                else:
-                    dayTime = False
+                # Wir resetten die Variable einmal am Tag
+                # Nach der Winterzeit von 21 - 22 Uhr
+                if now.hour == 21:
                     aufNetzSchaltenErlaubt = True
                     aufPvSchaltenErlaubt = True
                 # VerbraucherAkku -> schalten auf PV, VerbraucherNetz -> schalten auf Netz, VerbraucherPVundNetz -> zwischen 6-22 Uhr auf PV sonst Netz 
-                if (SkriptWerte["WrMode"] == VerbraucherAkku or (dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == netzMode:
+                if SkriptWerte["WrMode"] == VerbraucherAkku and aktualMode == netzMode:
                     aktualMode = schalteRelaisAufPv()
-                    # Wir wollen nur einmal am Tag umschalten damit nicht zu oft geschaltet wird.
+                elif SkriptWerte["WrMode"] == VerbraucherNetz and aufNetzSchaltenErlaubt == True and aktualMode == pvMode:
+                    # Wir wollen nicht zu oft am Tag umschalten Maximal 2 mal auf Netz.
                     aufNetzSchaltenErlaubt = False
-                elif ((SkriptWerte["WrMode"] == VerbraucherNetz and aufNetzSchaltenErlaubt == True) or (not dayTime and SkriptWerte["WrMode"] == VerbraucherPVundNetz)) and aktualMode == pvMode:
                     # prüfen ob alle WR vom Netz versorgt werden
                     if tmpglobalEffektaData["InputVoltageAnd"] == True:
                         aktualMode = schalteRelaisAufNetz()
