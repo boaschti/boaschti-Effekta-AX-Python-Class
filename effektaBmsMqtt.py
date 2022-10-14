@@ -250,6 +250,7 @@ def schalteAlleWrNetzLadenEin():
     
     for i in list(EffektaData.keys()):
         EffektaData[i]["EffektaCmd"].append("PCP02")       # charge prio 02=Netz und pv, 03=pv 
+        EffektaData[i]["EffektaCmd"].append(VerbraucherNetz)       # load prio 00=Netz, 02=Batt
         EffektaData[i]["EffektaCmd"].append(NetzErhaltungsLadestrom)   # Netz Ladestrom  
         
     SkriptWerte["WrNetzladen"] = True
