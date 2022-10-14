@@ -53,7 +53,7 @@ VerbraucherPVundNetz = "POP01"  # load prio 00=Netz, 02=Batt, 01=PV und Batt, we
 VerbraucherAkku = "POP02"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, wenn PV verfügbar ansonsten Netz
 InitAkkuProz = -1
 BmsWerte = {"Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "Ladephase": "none", "BmsEntladeFreigabe":True}
-SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "Error":False, "WrMode":"", "SkriptMode":"Auto", "PowerSaveMode":False, "schaltschwelleAkku":100.0, "schaltschwelleNetz":20.0, "schaltschwelleAkkuTollesWetter":20.0, "schaltschwelleAkkuRussia":100.0, "schaltschwelleNetzRussia":80.0, "schaltschwelleAkkuSchlechtesWetter":45.0, "schaltschwelleNetzSchlechtesWetter":30.0}
+SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "RussiaMode": False, "Error":False, "WrMode":"", "SkriptMode":"Auto", "PowerSaveMode":False, "schaltschwelleAkku":100.0, "schaltschwelleNetz":20.0, "schaltschwelleAkkuTollesWetter":20.0, "schaltschwelleAkkuRussia":100.0, "schaltschwelleNetzRussia":80.0, "schaltschwelleAkkuSchlechtesWetter":45.0, "schaltschwelleNetzSchlechtesWetter":30.0}
 
 client = mqtt.Client() 
 
@@ -111,61 +111,80 @@ def on_message(client, userdata, msg):
     
     tempTopic = str(msg.topic)
     tempTopicList = tempTopic.split("/")
+    tempMsg = str(msg.payload.decode())
     
+    # Beim Skriptstart und AutoInitWrMode = True abonieren wir das Topic PV/Skript/istwerte wo wir die eigenen Istwerte abgelegt haben.
+    # So können wir mit den alten Werten weitermachen
     if tempTopicList[1] == "Skript" and tempTopicList[2] == "istwerte":
-        # Wir haben die alten Daten vom MQTT Server bekommen und müssen nicht initialisieren
-        SkriptWerte.update(json.loads(str(msg.payload.decode())))
+        SkriptWerte.update(json.loads(tempMsg))
         AutoInitWrMode = False
         client.unsubscribe("PV/Skript/istwerte")
         
     # single Effekta commands
+    # Topic z.B.: Wr1/command
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "command":
-        EffektaData[tempTopicList[1]]["EffektaCmd"].append(str(msg.payload.decode()))
+        EffektaData[tempTopicList[1]]["EffektaCmd"].append(tempMsg)
     
     # Effekta requests
+    # Topic z.B.: Wr1/request
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "request":
-        EffektaData[tempTopicList[1]]["query"]["cmd"] = str(msg.payload.decode())
+        EffektaData[tempTopicList[1]]["query"]["cmd"] = tempMsg
         EffektaData[tempTopicList[1]]["query"]["getValue"] = True
         
     # all Effekta/Skript commands
-    if tempTopicList[1] == "allWr" and tempTopicList[2] == "command":
-        if str(msg.payload.decode()) == "WrAufAkku":
-            schalteAlleWrAufAkku()
-        if str(msg.payload.decode()) == "WrAufNetz":
-            schalteAlleWrAufNetzOhneNetzLaden()
-        if str(msg.payload.decode()) == "AkkuschutzEin":
-            SkriptWerte["Akkuschutz"] = True
-            passeSchaltschwellenAn()
-            sendeSkriptDaten()
-        if str(msg.payload.decode()) == "AkkuschutzAus":
-            SkriptWerte["Akkuschutz"] = False
-            passeSchaltschwellenAn()
-            sendeSkriptDaten()
-        if str(msg.payload.decode()) == "NetzLadenAus":
-            schalteAlleWrNetzLadenAus()
-        if str(msg.payload.decode()) == "NetzLadenEin":
-            schalteAlleWrNetzLadenEin()
-        if str(msg.payload.decode()) == "NetzSchnellLadenEin":
-            schalteAlleWrNetzSchnellLadenEin()
-        if str(msg.payload.decode()) == "socResetMaxAndHold":
-            SocMonitorWerte["Commands"].append(str(msg.payload.decode()))
-        if str(msg.payload.decode()) == "Auto" or str(msg.payload.decode()) == "Manual":
-            SkriptWerte["SkriptMode"] = str(msg.payload.decode())
-            sendeSkriptDaten()
-        if str(msg.payload.decode()) == "PowerSaveEin":    
-            SkriptWerte["PowerSaveMode"] = True
-            sendeSkriptDaten()
-        if str(msg.payload.decode()) == "PowerSaveAus":    
-            SkriptWerte["PowerSaveMode"] = False 
-            sendeSkriptDaten()       
-        if str(msg.payload.decode()) in ["PDb", "PEb"]:
-            for i in list(EffektaData.keys()):
-                EffektaData[i]["EffektaCmd"].append(str(msg.payload.decode()))      
+    if tempTopicList[1] == "allWr":
+        # Topic z.B.: allWr/command
+        if tempTopicList[2] == "command":
+            if tempMsg == "WrAufAkku":
+                schalteAlleWrAufAkku()
+            elif tempMsg == "WrAufNetz":
+                schalteAlleWrAufNetzOhneNetzLaden()
+            elif tempMsg == "AkkuschutzEin":
+                SkriptWerte["Akkuschutz"] = True
+                passeSchaltschwellenAn()
+                sendeSkriptDaten()
+            elif tempMsg == "AkkuschutzAus":
+                SkriptWerte["Akkuschutz"] = False
+                passeSchaltschwellenAn()
+                sendeSkriptDaten()
+            elif tempMsg == "RussiaModeEin":
+                SkriptWerte["RussiaMode"] = True
+                passeSchaltschwellenAn()
+                sendeSkriptDaten()
+            elif tempMsg == "RussiaModeAus":
+                SkriptWerte["RussiaMode"] = False
+                passeSchaltschwellenAn()
+                sendeSkriptDaten()
+            elif tempMsg == "NetzLadenAus":
+                schalteAlleWrNetzLadenAus()
+            elif tempMsg == "NetzLadenEin":
+                schalteAlleWrNetzLadenEin()
+            elif tempMsg == "NetzSchnellLadenEin":
+                schalteAlleWrNetzSchnellLadenEin()
+            elif tempMsg == "socResetMaxAndHold":
+                SocMonitorWerte["Commands"].append(tempMsg)
+            elif tempMsg == "PowerSaveEin":    
+                SkriptWerte["PowerSaveMode"] = True
+                sendeSkriptDaten()
+            elif tempMsg == "PowerSaveAus":    
+                SkriptWerte["PowerSaveMode"] = False 
+                sendeSkriptDaten()       
+            elif tempMsg in ["PDb", "PEb"]:
+                for i in list(EffektaData.keys()):
+                    EffektaData[i]["EffektaCmd"].append(tempMsg)   
+        elif tempTopicList[2] == "value":
+            setableSkriptWerte = ["schaltschwelleAkkuTollesWetter", "schaltschwelleAkkuRussia", "schaltschwelleNetzRussia", "schaltschwelleAkkuSchlechtesWetter", "schaltschwelleNetzSchlechtesWetter", "SkriptMode"]
+            # Topic z.B.: allWr/value/schaltschwelleAkkuTollesWetter
+            if tempTopicList[3] in setableSkriptWerte:
+                SkriptWerte[tempTopicList[3]] = tempMsg
+                sendeSkriptDaten()
             
-    # get CompleteProduction from MQTT
+            
+    # Beim Skriptstart abonieren wir das Topic PV/WRxx/CompleteProduction wo wir die eigenen Istwerte abgelegt haben.
+    # So können wir mit den alten Werten weitermachen.
     if tempTopicList[1] in list(EffektaData.keys()) and tempTopicList[2] == "CompleteProduction":
         EffektaData[tempTopicList[1]]["EffektaCmd"].append("CompleteProduction")    
-        EffektaData[tempTopicList[1]]["EffektaCmd"].append(str(msg.payload.decode()))
+        EffektaData[tempTopicList[1]]["EffektaCmd"].append(tempMsg)
         client.unsubscribe("PV/" + tempTopicList[1] + "/CompleteProduction")
     
         
