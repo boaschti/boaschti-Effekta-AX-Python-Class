@@ -945,8 +945,8 @@ def setInverterMode(wetterDaten):
                     schalteAlleWrAufAkku()
                     NetzLadenAusGesperrt = False
                     myPrint("Info: %iP erreicht -> Schalte auf Akku"  %SkriptWerte["schaltschwelleAkku"])
-            # Wr Mode nicht bekannt
             else:
+                # Wr Mode nicht bekannt
                 schalteAlleWrAufNetzOhneNetzLaden()
                 myPrint("Error: WrMode nicht bekannt! Schalte auf Netz")
 
@@ -960,44 +960,6 @@ def setInverterMode(wetterDaten):
                 schalteAlleWrNetzLadenAus()
                 myPrint("Info: NetzLadenaus %iP erreicht -> schalte Laden aus." %SkriptWerte["schaltschwelleNetzLadenaus"])            
             
-            
-#            # Ab hier beginnnt der Teil der die Anlage stufenweise wieder auf Akkubetrieb schaltet 
-#            # Wenn der Akku wieder über die schaltschwelleAkku ist dann wird er wieder Tag und Nacht genutzt
-#            if not SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleAkku"]:
-#                SkriptWerte["Akkuschutz"] = False
-#                passeSchaltschwellenAn()
-#                schalteAlleWrAufAkku()
-#                myPrint("Info: Schalte auf Akku")
-#            # Wenn der Akku über die schaltschwellePvNetz ist dann geben wir den Akku wieder frei wenn PV verfügbar ist. PV (Tag), Netz (Nacht)
-#            elif SkriptWerte["WrMode"] == VerbraucherNetz and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwellePvNetz"]:
-#                # Hier wird explizit nur geschalten wenn der WR auf VerbraucherNetz steht damit der Zweig nur reagiert wenn der Akku leer war und voll wird 
-#                schalteAlleWrNetzLadenAus()
-#                NetzLadenAusGesperrt = False
-#                schalteAlleWrVerbraucherPVundNetz()
-#                myPrint("Info: Schalte auf PV und Netzbetrieb")
-#                
-#                
-#            # Ab hier beginnt der Teil der die Anlage auf  Netz schaltet sowie das Netzladen ein und aus schaltet
-#            # Wir schalten auf Netz wenn der min Soc unterschritten wird
-#            if SkriptWerte["WrMode"] == VerbraucherAkku and SocMonitorWerte["Prozent"] <= SkriptWerte["MinSoc"]:
-#                schalteAlleWrAufNetzOhneNetzLaden()
-#                myPrint("Info: MinSoc %iP erreicht -> schalte auf Netz." %SkriptWerte["MinSoc"])
-#            # Wenn das Netz Laden durch eine Unterspannungserkennung eingeschaltet wurde schalten wir es aus wenn der Akku wieder 10% hat
-#            elif SkriptWerte["WrNetzladen"] == True and NetzLadenAusGesperrt == False and SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleNetzLadenaus"]:
-#                schalteAlleWrNetzLadenAus()
-#                myPrint("Info: NetzLadenaus %iP erreicht -> schalte Laden aus." %SkriptWerte["schaltschwelleNetzLadenaus"])
-#            # Wenn die Verbraucher auf PV (Tag) und Netz (Nacht) geschaltet wurden und der Akku wieder unter die schaltschwelleNetz fällt dann wird auf Netz geschaltet
-#            elif SkriptWerte["WrMode"] == VerbraucherPVundNetz and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetz"]:
-#                schalteAlleWrAufNetzOhneNetzLaden()
-#                myPrint("Info: Schalte auf Netz")
-#            # Wenn wir 
-#            elif SkriptWerte["WrMode"] != VerbraucherAkku and SkriptWerte["WrNetzladen"] == False and SkriptWerte["Akkuschutz"] == False and SocMonitorWerte["Prozent"] < SkriptWerte["schaltschwelleNetzLadenaus"] and SocMonitorWerte["Prozent"] != InitAkkuProz:
-#                SkriptWerte["Akkuschutz"] = True
-#                myPrint("Info: %iP erreicht -> schalte Akkuschutz ein." %SkriptWerte["schaltschwelleNetzLadenaus"])
-#            # Wenn Akkuschutz an ist und schaltschwelle NetzLadenEin erreicht ist dann laden wir vom Netz
-#            elif SkriptWerte["WrNetzladen"] == False and SkriptWerte["Akkuschutz"] == True and SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetzLadenein"]:
-#                schalteAlleWrNetzLadenEin()
-#                myPrint("Info: Schalte auf Netz mit laden")
         EntladeFreigabeGesendet = False
     elif EntladeFreigabeGesendet == False:
         EntladeFreigabeGesendet = True
