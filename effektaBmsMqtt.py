@@ -60,6 +60,11 @@ NetzLadenAusGesperrt = False
 
 client = mqtt.Client() 
 
+# Topics
+DiscoveryTopicSensor = "homeassistant/sensor/config" 
+
+
+
 def myPrint(msg):
     if beVerbose:
         print(msg)
@@ -342,6 +347,39 @@ def schalteAlleWrAufNetzMitNetzladen():
     SkriptWerte["WrMode"] = VerbraucherNetz
     SkriptWerte["WrNetzladen"] = True
     sendeSkriptDaten()
+
+def sendDiscoveryHomeAssistant():
+    """
+    https://www.home-assistant.io/docs/mqtt/discovery/
+    topic "homeassistant/binary_sensor/garden/config" 
+    message '{"name": "garden", "device_class": "motion", "state_topic": "homeassistant/binary_sensor/garden/state"}'
+    """
+    templateMsgSensor = {"topic":"", "name": "", "value_template":"{{ value_json.%s | int }}", "unit_of_measurement ":""}
+    
+    # send Effekta Sensor templates to Homeassistant
+    # EffektaData[WR.EffektaName()]["EffektaWerte"] = {"timeStamp": 0, "Netzspannung": 0, "AcOutSpannung": 0, "AcOutPowerW": 0, "PvPower": 0, "BattChargCurr": 0, "BattDischargCurr": 0, "ActualMode": "", "DailyProduction": 0.0, "CompleteProduction": 0, "DailyCharge": 0.0, "DailyDischarge": 0.0, "BattCapacity": 0, "DeviceStatus2": "", "BattVoltage": 0.0}
+    for wr in list(EffektaData.keys()):
+        wrTopic = ("PV/" + wr + "/istwerte")
+        for key in EffektaData[wr]:
+            templateMsgSensor["topic"] = wrTopic
+            templateMsgSensor["name"] = key + " " + wr
+            templateMsgSensor["value_template"] = templateMsgSensor["value_template"]%key
+            if "Power" in key:
+                einheit = "W"
+            elif "Curr" in key:
+                einheit = "A"
+            elif "Daily" in key or "Produ" in key:
+                einheit = "KWh"
+            elif "Spannung" in key:
+                einheit = "V"
+            else:
+                einheit = ""
+            templateMsgSensor["unit_of_measurement"] = einheit
+            try: 
+                client.publish(DiscoveryTopicSensor, templateMsgSensor)
+            except:
+                myPrint("SocMonitor mqtt konnte nicht gesendet werden")            
+        
 
 def getGlobalEffektaData():
     
@@ -1226,6 +1264,7 @@ if len(UsbRelSerial):
 #serBMS.write(b'vvoll 3900')
 #serBMS.write(b'start')
 
+sendDiscoveryHomeAssistant()
 
 # Initial Zustand manuell herstellen damit das Umschalten bei leerem und voll werdenden Akku funktioniert
 if not AutoInitWrMode:
