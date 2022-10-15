@@ -234,6 +234,15 @@ def checkWerteSprungMaxJump(newValue, oldValue, jump):
 client.on_connect = on_connect
 client.on_message = on_message
 
+"""
+schalteAlleWrAufAkku()              Schaltet alle Wr auf Akku, setzt die Unterspannungserkennung des Wr ausser Kraft
+schalteAlleWrNetzLadenAus()         Schaltet das Laden auf PV
+schalteAlleWrNetzLadenEin()         Schaltet das Laden auf PV+Netz, schaltet die Verbraucher auf Netz, setzt den Netz Ladstrom auf NetzErhaltungsLadestrom
+schalteAlleWrNetzSchnellLadenEin()  Schaltet das Laden auf PV+Netz, schaltet die Verbraucher auf Netz, setzt den Netz Ladstrom auf NetzSchnellLadestrom, schaltet das Skript auf Manuell
+schalteAlleWrAufNetzOhneNetzLaden() Schaltet alle Wr auf Netz, setzt die Unterspannungserkennung des Wr ausser Kraft
+schalteAlleWrAufNetzMitNetzladen()  Schaltet alle Wr auf Netz, setzt die Unterspannungserkennung des Wr auf aktiv
+"""
+
 def schalteAlleWrAufAkku():
     global EffektaData
     global SkriptWerte
@@ -285,6 +294,7 @@ def schalteAlleWrNetzSchnellLadenEin():
         EffektaData[i]["EffektaCmd"].append(NetzSchnellLadestrom)   # Netz Ladestrom 
         
     SkriptWerte["WrNetzladen"] = True
+    # Wir müssen hier auf Manuell schalten damit das Skrip nich gleich zurückschaltet
     SkriptWerte["SkriptMode"] = "Manual"
     SkriptWerte["WrMode"] = VerbraucherNetz
     sendeSkriptDaten()
@@ -309,6 +319,8 @@ def schalteAlleWrAufNetzOhneNetzLaden():
     sendeSkriptDaten()
 
 def schalteAlleWrAufNetzMitNetzladen():
+    # Diese Funktion setzt den Wr in einen Modus wo er auch selbst die Unterspannung überwacht. Sollten wir diese erreichen schaltet er komplett ab.
+    # Dies ist nötig wenn die Anlage aufgrund tiefer entladung auf Netz geschaltet wurde.
     # Test:
     # funktion aufrufen, wr schaltet dann auf netz, netz ausschalten, wr schaltet auf akku, akku entladen <48V, wr schaltet komplett ab, strom aus akku: 0A
     # ergebnis ok
@@ -379,6 +391,7 @@ def GetSocData():
         
         if SocMonitorWerte["FloatingMode"] == True and resetSocSended == False:
             resetSocSended = True
+            # Wir setzen den Soc Monitor auf 100% 
             SocMonitorWerte["Commands"].append("socResetMaxAndHold")
             # Wir schreiben gleich 100 in den Akkustand um einen fehlerhaften Schaltvorgang aufgrund des aktuellen Akkustandes zu verhindern
             SocMonitorWerte["Prozent"] = 100 
