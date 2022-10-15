@@ -54,6 +54,9 @@ VerbraucherAkku = "POP02"       # load prio 00=Netz, 02=Batt, 01=PV und Batt, we
 InitAkkuProz = -1
 BmsWerte = {"Vmin": 0.0, "Vmax": 0.0, "AkkuAh": 0.0, "Ladephase": "none", "BmsEntladeFreigabe":True}
 SkriptWerte = {"WrNetzladen":False, "Akkuschutz":False, "RussiaMode": False, "Error":False, "WrMode":"", "SkriptMode":"Auto", "PowerSaveMode":False, "schaltschwelleAkku":100.0, "schaltschwelleNetz":20.0, "schaltschwelleAkkuTollesWetter":20.0, "schaltschwelleAkkuRussia":100.0, "schaltschwelleNetzRussia":80.0, "schaltschwelleAkkuSchlechtesWetter":45.0, "schaltschwelleNetzSchlechtesWetter":30.0}
+setableSkriptWerte = ["schaltschwelleAkkuTollesWetter", "schaltschwelleAkkuRussia", "schaltschwelleNetzRussia", "schaltschwelleAkkuSchlechtesWetter", "schaltschwelleNetzSchlechtesWetter", "SkriptMode"]
+EntladeFreigabeGesendet = False
+NetzLadenAusGesperrt = False
 
 client = mqtt.Client() 
 
@@ -173,7 +176,6 @@ def on_message(client, userdata, msg):
                 for i in list(EffektaData.keys()):
                     EffektaData[i]["EffektaCmd"].append(tempMsg)   
         elif tempTopicList[2] == "value":
-            setableSkriptWerte = ["schaltschwelleAkkuTollesWetter", "schaltschwelleAkkuRussia", "schaltschwelleNetzRussia", "schaltschwelleAkkuSchlechtesWetter", "schaltschwelleNetzSchlechtesWetter", "SkriptMode"]
             # Topic z.B.: allWr/value/schaltschwelleAkkuTollesWetter
             if tempTopicList[3] in setableSkriptWerte:
                 SkriptWerte[tempTopicList[3]] = tempMsg
@@ -770,8 +772,7 @@ def NetzUmschaltung():
                     time.sleep(0.5)
                 except:
                     myPrint("Error: UsbRel send Serial failed 4!")           
-       
-                
+
 
 def autoInitInverter():
 
@@ -785,7 +786,7 @@ def autoInitInverter():
     elif SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleAkkuSchlechtesWetter"]:
         schalteAlleWrAufAkku()
         myPrint("Autoinit: Schalte auf Akku")    
-
+        
 
 def passeSchaltschwellenAn():
     global SkriptWerte
@@ -795,6 +796,7 @@ def passeSchaltschwellenAn():
     SkriptWerte["schaltschwelleNetzLadenein"] = 6.0
     SkriptWerte["MinSoc"] = 10.0
     SkriptWerte["SchaltschwelleAkkuTollesWetter"] = 20.0
+    SkriptWerte["AkkuschutzAbschalten"] = SkriptWerte["schaltschwelleAkkuSchlechtesWetter"] + 15.0
     # todo Automatisch ermitteln
     SkriptWerte["verbrauchNachtAkku"] = 25.0
     SkriptWerte["verbrauchNachtNetz"] = 3.0
@@ -817,18 +819,15 @@ def passeSchaltschwellenAn():
                 SkriptWerte["schaltschwelleNetz"] = SkriptWerte["schaltschwelleNetzSchlechtesWetter"]
         else:
             # Wir wollen die Schaltschwellen nur übernehmen wenn diese plausibel sind
-            if SkriptWerte["MinSOC"] < SkriptWerte["schaltschwelleAkkuTollesWetter"]:        
+            if SkriptWerte["MinSoc"] < SkriptWerte["schaltschwelleAkkuTollesWetter"]:        
                 if SkriptWerte["schaltschwelleAkku"] != SkriptWerte["schaltschwelleAkkuTollesWetter"]:
                     sendeMqtt = True
                 SkriptWerte["schaltschwelleAkku"] = SkriptWerte["schaltschwelleAkkuTollesWetter"]
-                SkriptWerte["schaltschwelleNetz"] = SkriptWerte["MinSOC"]
+                SkriptWerte["schaltschwelleNetz"] = SkriptWerte["MinSoc"]
         
     # Wetter Sonnenstunden Schaltschwellen
     SkriptWerte["wetterSchaltschwelleNetz"] = 6    # Einheit Sonnnenstunden
 
-
-EntladeFreigabeGesendet = False
-NetzLadenAusGesperrt = False
 
 def setInverterMode(wetterDaten):
     global SkriptWerte
@@ -868,13 +867,14 @@ def setInverterMode(wetterDaten):
                         # Wir wollen den Akku schonen weil es nichts bringt wenn wir ihn leer machen
                             if SocMonitorWerte["Prozent"] < (SkriptWerte["verbrauchNachtAkku"] + SkriptWerte["MinSoc"]):
                                 if SkriptWerte["WrMode"] == VerbraucherAkku:
+                                    # todo ist das so sinnvoll. Bestand
+                                    schalteAlleWrAufNetzOhneNetzLaden()
                                     SkriptWerte["Akkuschutz"] = True
-                                    passeSchaltschwellenAn()
                                     myPrint("Info: Sonne morgen < %ih -> schalte auf Netz." %SkriptWerte["wetterSchaltschwelleNetz"])
                     else:
                         myPrint("Error: Keine Wetterdaten!")
             # In der Sommerzeit löst now.hour = 17 um 18 Uhr aus, In der Winterzeit dann um 17 Uhr
-            elif now.hour >= 12 and now.hour < 23:
+            if now.hour >= 12 and now.hour < 23:
             #if Zeit >= 17 and Zeit < 23:
                 if "Tag_0" in wetterDaten and "Tag_1" in wetterDaten:
                     if wetterDaten["Tag_0"] != None and wetterDaten["Tag_1"] != None:
@@ -882,22 +882,24 @@ def setInverterMode(wetterDaten):
                         # Wir wollen den Akku schonen weil es nichts bringt wenn wir ihn leer machen
                             if SocMonitorWerte["Prozent"] < (SkriptWerte["verbrauchNachtAkku"] + SkriptWerte["MinSoc"]):
                                 if SkriptWerte["WrMode"] == VerbraucherAkku:
+                                    # todo ist das so sinnvoll. Bestand
+                                    schalteAlleWrAufNetzOhneNetzLaden()
                                     SkriptWerte["Akkuschutz"] = True
-                                    passeSchaltschwellenAn()
                                     myPrint("Info: Sonne heute und morgen < %ih -> schalte auf Netz." %SkriptWerte["wetterSchaltschwelleNetz"])
                     else:
                         myPrint("Error: Keine Wetterdaten!")
             
+            passeSchaltschwellenAn()
             
             # todo SkriptWerte["Akkuschutz"] = False Über Wetter?? Was ist mit "Error: Ladestand weicht ab"
-                    
+            if SocMonitorWerte["Prozent"] >= SkriptWerte["AkkuschutzAbschalten"]:
+                SkriptWerte["Akkuschutz"] = False
                 
-            passeSchaltschwellenAn()
             if SkriptWerte["WrMode"] == VerbraucherAkku:
                 if SocMonitorWerte["Prozent"] <= SkriptWerte["MinSoc"]:
                     schalteAlleWrAufNetzOhneNetzLaden()
                     myPrint("Info: MinSOC %iP erreicht -> schalte auf Netz." %SkriptWerte["MinSoc"])                 
-                if SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetz"]:
+                elif SocMonitorWerte["Prozent"] <= SkriptWerte["schaltschwelleNetz"]:
                     schalteAlleWrAufNetzOhneNetzLaden()
                     myPrint("Info: %iP erreicht -> schalte auf Netz." %SkriptWerte["schaltschwelleNetz"])  
             elif SkriptWerte["WrMode"] == VerbraucherNetz:
@@ -971,7 +973,7 @@ def setInverterMode(wetterDaten):
             myPrint("Error: Ladestand weicht ab")
         # wir setzen einen error weil das nicht plausibel ist und wir hin und her schalten sollte die freigabe wieder kommen
         # wir wollen den Akku erst bis 100 P aufladen 
-        if SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwellePvNetz"]:
+        if SocMonitorWerte["Prozent"] >= SkriptWerte["schaltschwelleAkkuTollesWetter"]:
             SkriptWerte["Error"] = True
             myPrint("Error: Ladestand nicht plausibel")
         sendeMqtt = True
