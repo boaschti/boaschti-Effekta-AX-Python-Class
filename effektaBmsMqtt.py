@@ -788,21 +788,27 @@ def passeSchaltschwellenAn():
     
     # Russia Mode hat Vorrang ansonsten entscheiden wir je nach Wetter (Akkuschutz)
     if SkriptWerte["RussiaMode"]:
-        if SkriptWerte["schaltschwelleAkku"] != SkriptWerte["schaltschwelleAkkuRussia"]:
-            sendeMqtt = True
-        SkriptWerte["schaltschwelleAkku"] = SkriptWerte["schaltschwelleAkkuRussia"]
-        SkriptWerte["schaltschwelleNetz"] = SkriptWerte["schaltschwelleNetzRussia"]
+        # Wir wollen die Schaltschwellen nur übernehmen wenn diese plausibel sind
+        if SkriptWerte["schaltschwelleNetzRussia"] < SkriptWerte["schaltschwelleAkkuRussia"]:
+            if SkriptWerte["schaltschwelleAkku"] != SkriptWerte["schaltschwelleAkkuRussia"]:
+                sendeMqtt = True
+            SkriptWerte["schaltschwelleAkku"] = SkriptWerte["schaltschwelleAkkuRussia"]
+            SkriptWerte["schaltschwelleNetz"] = SkriptWerte["schaltschwelleNetzRussia"]
     else:
         if SkriptWerte["Akkuschutz"]:
-            if SkriptWerte["schaltschwelleAkku"] != SkriptWerte["schaltschwelleAkkuSchlechtesWetter"]:
-                sendeMqtt = True
-            SkriptWerte["schaltschwelleAkku"] = SkriptWerte["schaltschwelleAkkuSchlechtesWetter"]
-            SkriptWerte["schaltschwelleNetz"] = SkriptWerte["schaltschwelleNetzSchlechtesWetter"]
+            # Wir wollen die Schaltschwellen nur übernehmen wenn diese plausibel sind
+            if SkriptWerte["schaltschwelleNetzSchlechtesWetter"] < SkriptWerte["schaltschwelleAkkuSchlechtesWetter"]:        
+                if SkriptWerte["schaltschwelleAkku"] != SkriptWerte["schaltschwelleAkkuSchlechtesWetter"]:
+                    sendeMqtt = True
+                SkriptWerte["schaltschwelleAkku"] = SkriptWerte["schaltschwelleAkkuSchlechtesWetter"]
+                SkriptWerte["schaltschwelleNetz"] = SkriptWerte["schaltschwelleNetzSchlechtesWetter"]
         else:
-            if SkriptWerte["schaltschwelleAkku"] != SkriptWerte["schaltschwelleAkkuTollesWetter"]:
-                sendeMqtt = True
-            SkriptWerte["schaltschwelleAkku"] = SkriptWerte["schaltschwelleAkkuTollesWetter"]
-            SkriptWerte["schaltschwelleNetz"] = SkriptWerte["MinSOC"]
+            # Wir wollen die Schaltschwellen nur übernehmen wenn diese plausibel sind
+            if SkriptWerte["MinSOC"] < SkriptWerte["schaltschwelleAkkuTollesWetter"]:        
+                if SkriptWerte["schaltschwelleAkku"] != SkriptWerte["schaltschwelleAkkuTollesWetter"]:
+                    sendeMqtt = True
+                SkriptWerte["schaltschwelleAkku"] = SkriptWerte["schaltschwelleAkkuTollesWetter"]
+                SkriptWerte["schaltschwelleNetz"] = SkriptWerte["MinSOC"]
         
     # Wetter Sonnenstunden Schaltschwellen
     SkriptWerte["wetterSchaltschwelleNetz"] = 6    # Einheit Sonnnenstunden
